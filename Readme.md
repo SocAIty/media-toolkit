@@ -30,12 +30,14 @@ All files types support the same interface / methods.
 ```python
 from multimodal_files import ImageFile, AudioFile, VideoFile
 
-MultiModalFile().from_file("path/to/file")
-MultiModalFile().from_file(open("path/to/file", "rb"))
-MultiModalFile().from_numpy_array(my_array)
-MultiModalFile().from_bytes(b'bytes')
-MultiModalFile().from_base64('base64string')
-MultiModalFile().from_starlette_upload_file(starlette_upload_file)
+new_file = MultiModalFile()
+
+new_file.from_file("path/to/file")
+new_file.from_file(open("path/to/file", "rb"))
+new_file.from_numpy_array(my_array)
+new_file.from_bytes(b'bytes')
+new_file.from_base64('base64string')
+new_file.from_starlette_upload_file(starlette_upload_file)
 
 ```
 
@@ -46,13 +48,13 @@ Supports common serialization methods like bytes(), np.array(), dict()
 my_file = MultiModalFile().from_file("path/to/file")
 
 my_file.save("path/to/new_file")  
-as_numpy_array = my_file().to_numpy_array()
+as_numpy_array = my_file.to_numpy_array()
 as_numpy_array = np.array(my_file)
 
-as_bytes = MultiModalFile().to_bytes()
+as_bytes = my_file.to_bytes()
 as_bytes = bytes(my_file)
-as_base64 = MultiModalFile().to_base64()
-as_json = MultiModalFile().to_json()
+as_base64 = my_file.to_base64()
+as_json = my_file.to_json()
 ```
 
 ### Easy conversion from any type

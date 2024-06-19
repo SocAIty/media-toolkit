@@ -1,4 +1,10 @@
-opencv-python
+# Included are all deps for all file types.
+
+# General Dependencies
+
+# Image Files
 numpy
+opencv-python
+
+# Audio files
 soundfile
-tqdm
