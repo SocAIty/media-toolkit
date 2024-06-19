@@ -1,14 +1,14 @@
 import base64
 import io
 import mimetypes
-from typing import Union
+from typing import Union, BinaryIO
 import os
 
-from multimodal_files.dependency_requirements import requires_numpy, requires
+from multimodal_files.dependency_requirements import requires_numpy
+
 
 try:
     import numpy as np
-    from fastapi.responses import Response
 except ImportError:
     pass
 
@@ -27,30 +27,63 @@ class MultiModalFile:
         self.file_name = file_name
         self._content_buffer = io.BytesIO()
 
-    def set_content(self, buffer: Union[io.BytesIO, io.BufferedReader],
-                    path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
-        # read buffer
+    def from_any(self, data):
+        # it is already converted
+        if isinstance(data, MultiModalFile):
+            return data
+
+        # conversion factory
+        if type(data) in [io.BufferedReader, io.BytesIO]:
+            self.from_file(data)
+        elif isinstance(data, str):
+            if self._is_valid_file_path(data):
+                self.from_file(data)
+            else:
+                self.from_base64(data)
+        elif isinstance(data, bytes):
+            self.from_bytes(data)
+        elif type(data).__name__ == 'ndarray':
+            self.from_np_array(data)
+        elif data.__module__ == 'starlette.datastructures' and type(data).__name__ == 'UploadFile':
+            self.from_starlette_upload_file(data)
+
+        return self
+
+    def from_bytesio_or_handle(self, buffer: Union[io.BytesIO, BinaryIO, io.BufferedReader], copy: bool = True):
+        """
+        Set the content of the file from a BytesIO or a file handle.
+        :params buffer: The buffer to read from.
+        :params copy: If true, the buffer is completely read to bytes and the bytes copied to this file.
+        """
         self._reset_buffer()
         if type(buffer) in [io.BytesIO, io.BufferedReader]:
             buffer.seek(0)
-            self._content_buffer = buffer
+            if not copy:
+                self._reset_buffer()
+                self._content_buffer = buffer
+            else:
+                self.from_bytes(buffer.read())
+                buffer.seek(0)
 
         # set file name and type
-        self.file_name = path_or_handle if isinstance(path_or_handle, str) else path_or_handle.name
-        self.file_name = os.path.basename(self.file_name)
+        self.file_name = os.path.basename(buffer.name)
         self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
+
+        return self
+
+    def from_bytesio(self, buffer: Union[io.BytesIO, BinaryIO], copy: bool = True):
+        return self.from_bytesio_or_handle(buffer=buffer, copy=copy)
 
     def from_file(self, path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
         """
         Load a file from a file path, file handle or base64 and convert it to BytesIO.
         """
         if type(path_or_handle) in [io.BufferedReader, io.BytesIO]:
-            self.set_content(path_or_handle, path_or_handle)
+            self.from_bytesio_or_handle(path_or_handle)
         elif isinstance(path_or_handle, str):
             # read file from path
             with open(path_or_handle, 'rb') as file:
-                file_content = file.read()
-            self.from_bytes(file_content)
+                self.from_bytesio_or_handle(file)
 
         return self
 
@@ -84,16 +117,6 @@ class MultiModalFile:
 
     def to_bytes_io(self) -> io.BytesIO:
         return self._content_buffer
-
-    #def from_bytes_io(self, bytes_io: io.BytesIO, copy=True):
-    #    bytes_io.seek(0)
-    #    if not copy:
-    #        self._reset_buffer()
-    #        self._content_buffer = bytes_io
-    #    else:
-    #        self.from_bytes(bytes_io.read())
-#
-    #    return self
 
     @staticmethod
     def _decode_base_64_if_is(data: Union[bytes, str]):
@@ -201,4 +224,12 @@ class MultiModalFile:
         # ToDo: the from_base64 might overwrite name and content type (ImageFile). Check if this always is intended.
         self.from_base64(file_result_json["content"])
         return self
+
+    @staticmethod
+    def _is_valid_file_path(path: str):
+        try:
+            is_file = os.path.isfile(path)
+            return is_file
+        except:
+            return False
 
