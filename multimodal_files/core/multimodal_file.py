@@ -35,15 +35,6 @@ class MultiModalFile:
             buffer.seek(0)
             self._content_buffer = buffer
 
-        #if isinstance(buffer, io.BytesIO):
-        #    buffer.seek(0)
-        #    self._content_buffer = buffer
-        #    #self._content_buffer.seek(0)
-        #    #self._content_buffer.write(buffer.read())
-        #    #self._content_buffer.seek(0)
-        #elif isinstance(buffer, io.BufferedReader):
-        #    self._content_buffer = buffer
-
         # set file name and type
         self.file_name = path_or_handle if isinstance(path_or_handle, str) else path_or_handle.name
         self.file_name = os.path.basename(self.file_name)
@@ -83,10 +74,26 @@ class MultiModalFile:
         return self
 
     def to_bytes(self) -> bytes:
+        return self.read()
+
+    def read(self) -> bytes:
         self._content_buffer.seek(0)
         res = self._content_buffer.read()
         self._content_buffer.seek(0)
         return res
+
+    def to_bytes_io(self) -> io.BytesIO:
+        return self._content_buffer
+
+    #def from_bytes_io(self, bytes_io: io.BytesIO, copy=True):
+    #    bytes_io.seek(0)
+    #    if not copy:
+    #        self._reset_buffer()
+    #        self._content_buffer = bytes_io
+    #    else:
+    #        self.from_bytes(bytes_io.read())
+#
+    #    return self
 
     @staticmethod
     def _decode_base_64_if_is(data: Union[bytes, str]):
@@ -154,10 +161,6 @@ class MultiModalFile:
     def _reset_buffer(self):
         self._content_buffer.seek(0)
         self._content_buffer.truncate(0)
-
-    def read(self):
-        self._content_buffer.seek(0)
-        return self._content_buffer.read()
 
     def save(self, path: str):
         # create directory if not exists
