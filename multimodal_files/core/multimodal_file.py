@@ -4,22 +4,27 @@ import mimetypes
 from typing import Union
 import os
 
-from multimodal_files.dependency_requirements import requires_numpy
+from multimodal_files.dependency_requirements import requires_numpy, requires
 
 try:
     import numpy as np
+    from fastapi.responses import Response
 except ImportError:
     pass
 
 
-class UploadFile:
+class MultiModalFile:
     """
     Has file conversions that make it easy to work standardized with files across the web and in the sdk.
     Works natively with bytesio, base64 and binary data.
     """
-    def __init__(self):
-        self.content_type = "application/octet-stream"
-        self.file_name = "file"
+    def __init__(self, file_name: str = "file", content_type: str = "application/octet-stream"):
+        """
+        :param file_name: The name of the file. Note it is overwritten if you use from_file/from_starlette.
+        :param content_type: The content type of the file. Note it is overwritten if you use from_file/from_starlette.
+        """
+        self.content_type = content_type
+        self.file_name = file_name
         self._content_buffer = io.BytesIO()
 
     def set_content(self, buffer: Union[io.BytesIO, io.BufferedReader],
@@ -75,11 +80,13 @@ class UploadFile:
         self.file_name = starlette_upload_file.filename
         self.content_type = starlette_upload_file.content_type
         self.from_bytes(content)
-        return starlette_upload_file
+        return self
 
     def to_bytes(self) -> bytes:
         self._content_buffer.seek(0)
-        return self._content_buffer.read()
+        res = self._content_buffer.read()
+        self._content_buffer.seek(0)
+        return res
 
     @staticmethod
     def _decode_base_64_if_is(data: Union[bytes, str]):
@@ -169,4 +176,26 @@ class UploadFile:
 
     def __array__(self):
         return self.to_np_array()
+
+    def to_json(self):
+        """
+        Returns the file as a json serializable dictionary.
+        :return: { "file_name": str, "content_type": str, "content": str }
+        """
+        return {
+            "file_name": self.file_name,
+            "content_type": self.content_type,
+            "content": self.to_base64()
+        }
+
+    def from_dict(self, file_result_json: dict):
+        """
+        Load a file from a dictionary.
+        :param d: The dictionary to load from formatted as FileResult.to_json().
+        """
+        self.file_name = file_result_json["file_name"]
+        self.content_type = file_result_json["content_type"]
+        # ToDo: the from_base64 might overwrite name and content type (ImageFile). Check if this always is intended.
+        self.from_base64(file_result_json["content"])
+        return self
 

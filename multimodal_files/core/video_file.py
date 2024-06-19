@@ -1,5 +1,5 @@
 from multimodal_files.dependency_requirements import requires_cv2, requires_numpy
-from multimodal_files.core.upload_file import UploadFile
+from multimodal_files.core.multimodal_file import MultiModalFile
 
 try:
     import cv2
@@ -7,7 +7,7 @@ try:
 except ImportError:
     pass
 
-class VideoFile(UploadFile):
+class VideoFile(MultiModalFile):
     """
     A class to represent a video file.
     """
@@ -45,16 +45,3 @@ class VideoFile(UploadFile):
         for frame in frames:
             out.write(frame)
         out.release()
-
-    @staticmethod
-    def _necessary_libs_installed():
-        try:
-            import cv2
-            import numpy as np
-            return True
-        except ImportError:
-            return False
-
-    @staticmethod
-    def _get_necessary_libs() -> list:
-        return ["cv2", "numpy"]

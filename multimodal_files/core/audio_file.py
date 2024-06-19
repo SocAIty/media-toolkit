@@ -1,5 +1,5 @@
 from multimodal_files.dependency_requirements import requires
-from multimodal_files.core.upload_file import UploadFile
+from multimodal_files.core.multimodal_file import MultiModalFile
 import io
 
 try:
@@ -9,7 +9,7 @@ except ImportError:
     pass
 
 
-class AudioFile(UploadFile):
+class AudioFile(MultiModalFile):
     """
     Has file conversions that make it easy to work with image files across the web.
     Internally it uses numpy and librosa.

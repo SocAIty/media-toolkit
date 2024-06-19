@@ -1,5 +1,5 @@
 from multimodal_files.dependency_requirements import requires_numpy, requires_cv2, requires
-from multimodal_files.core.upload_file import UploadFile
+from multimodal_files.core.multimodal_file import MultiModalFile
 
 try:
     import cv2
@@ -8,7 +8,7 @@ except ImportError:
     pass
 
 
-class ImageFile(UploadFile):
+class ImageFile(MultiModalFile):
     """
     Has file conversions that make it easy to work with image files across the web.
     Internally it uses cv2 file format.
@@ -17,15 +17,21 @@ class ImageFile(UploadFile):
         super().from_bytes(data)
         self._detect_image_type()
 
-    @requires_cv2()
-    def from_np_array(self, np_array: np.array):
-        if "image/" not in self.content_type:
-            img_type, channels = self.detect_image_type_and_channels(np_array)
-        else:
-            img_type = self.content_type.split("/")[1]
+    @requires('cv2', 'numpy')
+    def from_np_array(self, np_array, img_type: str = None):
+        if isinstance(np_array, list):
+            np_array = np.array(np_array)
+
+        if img_type is None:
+            if "image/" not in self.content_type:
+                img_type, self._channels = self.detect_image_type_and_channels(np_array)
+            else:
+                img_type = self.content_type.split("/")[1]
+            self.content_type = f"image/{img_type}"
 
         is_success, buffer = cv2.imencode(f".{img_type}", np_array)
         if is_success:
+            # avoid to check again for image type by calling super().from_bytes instead of self.from_bytes
             return super().from_bytes(buffer)
         else:
             raise ValueError(f"Could not convert np_array to {img_type} image")
@@ -56,6 +62,9 @@ class ImageFile(UploadFile):
     @staticmethod
     def detect_image_type_and_channels(image) -> (str, int):
         """Detect the image type and number of _channels from a numpy array."""
+        if isinstance(image, list):
+            image = np.array(image)
+
         # Check the number of _channels
         if len(image.shape) == 2:
             channels = 1  # Grayscale
@@ -82,3 +91,4 @@ class ImageFile(UploadFile):
                 image_type = 'gif'
 
         return image_type, channels
+

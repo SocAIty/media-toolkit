@@ -1,1 +1,1 @@
-from multimodal_files.core import UploadFile, ImageFile, VideoFile, AudioFile
+from multimodal_files.core import MultiModalFile, ImageFile, VideoFile, AudioFile
