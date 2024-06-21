@@ -41,8 +41,8 @@ pip install multimodal-files[ImageFile]  # or [AudioFile, VideoFile, ...]
 # install from github for newest release
 pip install git+git://github.com/SocAIty/multimodal-files
 ```
-The version without dependencies does not include the optional dependencies like numpy, soundfile, etc. 
-Instead, you can only install the dependencies which are required for your project. Making the package size tiny.
+The package checks if you have missing dependencies for certain file types while using. 
+Use the ```--no-deps``` flag for a minimal tiny pure python installation.
 
 # Usage
 
