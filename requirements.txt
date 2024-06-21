@@ -1,4 +1,4 @@
-# Included are all deps for all file types.
+# Included are all deps for all file types (full installation)
 
 # General Dependencies
 

@@ -1,9 +1,9 @@
 
-  <h1 align="center" style="margin-top:-25px">Mutimodal-files</h1>
+  <h1 align="center" style="margin-top:-25px">Multimodal-files</h1>
 <p align="center">
   <img align="center" src="docs/multimodal_file_icon.png" height="200" />
 </p>
-  <h3 align="center" style="margin-top:-10px">Web-ready standardized file processing</h3>
+  <h3 align="center" style="margin-top:-10px">Web-ready standardized file processing and serialization</h3>
 
 
 # Features
@@ -34,13 +34,15 @@ You can install the package with PIP, or clone the repository.
 ```bash
 # install from pypi
 pip install multimodal-files
-# install version without dependencies
-pip install multimodal-files[no-deps]
+# install without dependencies: this is useful if you only need the basic functionality
+pip install multimodal-files --no-deps
+# if you only want to use certain file types
+pip install multimodal-files[ImageFile]  # or [AudioFile, VideoFile, ...]
 # install from github for newest release
 pip install git+git://github.com/SocAIty/multimodal-files
 ```
 The version without dependencies does not include the optional dependencies like numpy, soundfile, etc. 
-Instead you can only install the dependencies which are required for your project. Making the package size tiny.
+Instead, you can only install the dependencies which are required for your project. Making the package size tiny.
 
 # Usage
 
