@@ -24,10 +24,13 @@ class MultiModalFile:
         :param content_type: The content type of the file. Note it is overwritten if you use from_file/from_starlette.
         """
         self.content_type = content_type
-        self.file_name = file_name
+        self.file_name = file_name  # the name of the file also when specified in bytesio
         self._content_buffer = io.BytesIO()
 
     def from_any(self, data):
+        """
+        Load a file from any supported data type. The file is loaded into the memory as bytes.
+        """
         # it is already converted
         if isinstance(data, MultiModalFile):
             return data
@@ -59,15 +62,11 @@ class MultiModalFile:
         if type(buffer) in [io.BytesIO, io.BufferedReader]:
             buffer.seek(0)
             if not copy:
-                self._reset_buffer()
                 self._content_buffer = buffer
+                self._file_info()
             else:
                 self.from_bytes(buffer.read())
                 buffer.seek(0)
-
-        # set file name and type
-        self.file_name = os.path.basename(buffer.name)
-        self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
 
         return self
 
@@ -91,6 +90,7 @@ class MultiModalFile:
         self._reset_buffer()
         self._content_buffer.write(data)
         self._content_buffer.seek(0)
+        self._file_info()
         return self
 
     def from_starlette_upload_file(self, starlette_upload_file):
@@ -106,6 +106,54 @@ class MultiModalFile:
         self.from_bytes(content)
         return self
 
+    def from_base64(self, base64_str: str):
+        decoded = self._decode_base_64_if_is(base64_str)
+        if decoded is not None:
+            return self.from_bytes(base64.b64decode(base64_str))
+        else:
+            err_str = base64_str if len(base64_str) <= 50 else base64_str[:50] + "..."
+            raise ValueError(f"Decoding from base64 like string {err_str} was not possible. Check your data.")
+
+    @requires_numpy()
+    def from_np_array(self, np_array: np.array):
+        """
+        Convert a numpy array to a file which is saved as bytes b"\x93NUMPY" into the buffer.
+        """
+        self._reset_buffer()
+        np.save(self._content_buffer, np_array)
+        return self
+
+    def from_dict(self, file_result_json: dict):
+        """
+        Load a file from a dictionary.
+        :param d: The dictionary to load from formatted as FileResult.to_json().
+        """
+        self.file_name = file_result_json["file_name"]
+        self.content_type = file_result_json["content_type"]
+        # ToDo: the from_base64 might overwrite name and content type (ImageFile). Check if this always is intended.
+        self.from_base64(file_result_json["content"])
+        return self
+
+    @requires_numpy()
+    def to_np_array(self, shape=None, dtype=np.uint8):
+        """
+        If file was created with from_np_array it will return the numpy array.
+        Else it will try to convert the file to a numpy array (note this is converted bytes representation of the file).
+        :param shape: The shape of the numpy array. If None it will be returned flat.
+        :param dtype: The dtype of the numpy array. If None it will be uint8.
+        """
+        bytes = self.to_bytes()
+        # check if was saved with np.save so bytes contains NUMPY
+        if bytes.startswith(b"\x93NUMPY"):
+            self._content_buffer.seek(0)
+            return np.load(self._content_buffer, allow_pickle=False)
+
+        shape = shape or (1, len(bytes))
+        dtype = dtype or np.uint8
+
+        arr_flat = np.frombuffer(bytes, dtype=dtype)
+        return arr_flat.reshape(shape)
+
     def to_bytes(self) -> bytes:
         return self.read()
 
@@ -117,6 +165,59 @@ class MultiModalFile:
 
     def to_bytes_io(self) -> io.BytesIO:
         return self._content_buffer
+
+    def to_base64(self):
+        return base64.b64encode(self.to_bytes()).decode()
+
+    def to_httpx_send_able_tuple(self):
+        return self.file_name, self.read(), self.content_type
+
+    def _reset_buffer(self):
+        self._content_buffer.seek(0)
+        self._content_buffer.truncate(0)
+
+    def save(self, path: str):
+        # create directory if not exists
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
+
+        # if path includes filename save file there. If not append self.filename
+        if os.path.isdir(path):
+            path = os.path.join(path, self.file_name)
+
+        with open(path, 'wb') as file:
+            file.write(self.read())
+
+    def _file_info(self):
+        """
+        After writing the file to the buffer, this method is called to determine additional file informations.
+        For videos this might be length, frame rate...
+        If you subclass don't forget to call super()._file_info() to set the file name and content type.
+        """
+        # set file name and type
+        if hasattr(self._content_buffer, "name"):
+            self.file_name = os.path.basename(self._content_buffer.name)
+        if self.file_name != "file":
+            self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
+        else:
+            self.content_type = "application/octet-stream"
+
+    def __bytes__(self):
+        return self.to_bytes()
+
+    def __array__(self):
+        return self.to_np_array()
+
+    def to_json(self):
+        """
+        Returns the file as a json serializable dictionary.
+        :return: { "file_name": str, "content_type": str, "content": str }
+        """
+        return {
+            "file_name": self.file_name,
+            "content_type": self.content_type,
+            "content": self.to_base64()
+        }
 
     @staticmethod
     def _decode_base_64_if_is(data: Union[bytes, str]):
@@ -138,92 +239,6 @@ class MultiModalFile:
             pass
 
         return None
-
-    def from_base64(self, base64_str: str):
-        decoded = self._decode_base_64_if_is(base64_str)
-        if decoded is not None:
-            return self.from_bytes(base64.b64decode(base64_str))
-        else:
-            raise ValueError("Decoding from base64 like string was not possible. Check your data.")
-
-    def to_base64(self):
-        return base64.b64encode(self.to_bytes()).decode()
-
-    @requires_numpy()
-    def from_np_array(self, np_array: np.array):
-        """
-        Convert a numpy array to a file which is saved as bytes b"\x93NUMPY" into the buffer.
-        """
-        self._reset_buffer()
-        np.save(self._content_buffer, np_array)
-        return self
-
-    @requires_numpy()
-    def to_np_array(self, shape=None, dtype=np.uint8):
-        """
-        If file was created with from_np_array it will return the numpy array.
-        Else it will try to convert the file to a numpy array (note this is converted bytes representation of the file).
-        :param shape: The shape of the numpy array. If None it will be returned flat.
-        :param dtype: The dtype of the numpy array. If None it will be uint8.
-        """
-        bytes = self.to_bytes()
-        # check if was saved with np.save so bytes contains NUMPY
-        if bytes.startswith(b"\x93NUMPY"):
-            self._content_buffer.seek(0)
-            return np.load(self._content_buffer)
-
-        shape = shape or (1, len(bytes))
-        dtype = dtype or np.uint8
-
-        arr_flat = np.frombuffer(bytes, dtype=dtype)
-        return arr_flat.reshape(shape)
-
-    def to_httpx_send_able_tuple(self):
-        return self.file_name, self.read(), self.content_type
-
-    def _reset_buffer(self):
-        self._content_buffer.seek(0)
-        self._content_buffer.truncate(0)
-
-    def save(self, path: str):
-        # create directory if not exists
-        if not os.path.exists(os.path.dirname(path)):
-            os.makedirs(os.path.dirname(path))
-
-        # if path includes filename save file there. If not append self.filename
-        if os.path.isdir(path):
-            path = os.path.join(path, self.file_name)
-
-        with open(path, 'wb') as file:
-            file.write(self.read())
-
-    def __bytes__(self):
-        return self.to_bytes()
-
-    def __array__(self):
-        return self.to_np_array()
-
-    def to_json(self):
-        """
-        Returns the file as a json serializable dictionary.
-        :return: { "file_name": str, "content_type": str, "content": str }
-        """
-        return {
-            "file_name": self.file_name,
-            "content_type": self.content_type,
-            "content": self.to_base64()
-        }
-
-    def from_dict(self, file_result_json: dict):
-        """
-        Load a file from a dictionary.
-        :param d: The dictionary to load from formatted as FileResult.to_json().
-        """
-        self.file_name = file_result_json["file_name"]
-        self.content_type = file_result_json["content_type"]
-        # ToDo: the from_base64 might overwrite name and content type (ImageFile). Check if this always is intended.
-        self.from_base64(file_result_json["content"])
-        return self
 
     @staticmethod
     def _is_valid_file_path(path: str):

@@ -13,10 +13,6 @@ class ImageFile(MultiModalFile):
     Has file conversions that make it easy to work with image files across the web.
     Internally it uses cv2 file format.
     """
-    def from_bytes(self, data: bytes):
-        super().from_bytes(data)
-        self._detect_image_type()
-
     @requires('cv2', 'numpy')
     def from_np_array(self, np_array, img_type: str = None):
         if isinstance(np_array, list):
@@ -36,9 +32,6 @@ class ImageFile(MultiModalFile):
         else:
             raise ValueError(f"Could not convert np_array to {img_type} image")
 
-    def from_base64(self, base64_str: str):
-        super().from_base64(base64_str)
-        self._detect_image_type()
 
     @requires('numpy', 'cv2')
     def to_np_array(self):
@@ -53,11 +46,13 @@ class ImageFile(MultiModalFile):
     def save(self, path: str):
         cv2.imwrite(path, self.to_np_array())
 
-    def _detect_image_type(self):
+    def _file_info(self):
+        super()._file_info()
         np_array = self.to_np_array()
         img_type, self._channels = self.detect_image_type_and_channels(np_array)
         if img_type is not None:
             self.content_type = f"image/{img_type}"
+        
 
     @staticmethod
     def detect_image_type_and_channels(image) -> (str, int):

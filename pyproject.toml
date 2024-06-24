@@ -16,6 +16,7 @@ dependencies = [
     "numpy>=1.18.0",
     "opencv-python>=4.2",
     "soundfile>=0.12.0",
+    "av>=12.0.0",
 ]
 
 [project.urls]
@@ -23,11 +24,6 @@ Repository = "https://github.com/SocAIty/multimodal-files"
 
 
 [project.optional-dependencies]
-full = [
-    "numpy>=1.18.0",
-    "opencv-python>=4.2",
-    "soundfile>=0.12.0",
-]
 ImageFile = [
     "numpy>=1.18.0",
     "opencv-python>=4.2",
@@ -35,4 +31,5 @@ ImageFile = [
 AudioFile = [
     "numpy>=1.18.0",
     "soundfile>=0.12.0",
+    "av>=12.0.0",
 ]

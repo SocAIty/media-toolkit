@@ -47,12 +47,13 @@ Use the ```--no-deps``` flag for a minimal tiny pure python installation.
 # Usage
 
 ## Create a multimodal-file from any data type
-The library automatically detect the data type and loads it correctly.
+The library automatically detects the data type and loads it correctly.
 ```python
 from multimodal_files import MultiModalFile, ImageFile, AudioFile, VideoFile
 
-# represents either path, base64, bytesio, file_handle, numpy array ...
-arbitrary_data = "...."
+# could be a path, base64, bytesio, file_handle, numpy array ...
+arbitrary_data = "...." 
+# Instantiate a multimodal file
 new_file = ImageFile().from_any(arbitrary_data)
 ```
 
