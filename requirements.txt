@@ -1,10 +1,7 @@
 # Included are all deps for all file types (full installation)
-
-# General Dependencies
-
-# Image Files
-numpy
-opencv-python
-
-# Audio files
-soundfile
+numpy>=1.18.0
+opencv-python>=4.2
+soundfile>=0.12.0
+vidgear[core]
+pydub
+tqdm

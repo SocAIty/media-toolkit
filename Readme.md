@@ -29,7 +29,7 @@ Only use the file types you need, no unnecessary dependencies.
 
 ## Installation
 
-You can install the package with PIP, or clone the repository.
+You can install the package with PIP, or clone the repository. 
 
 ```bash
 # install from pypi
@@ -43,6 +43,7 @@ pip install git+git://github.com/SocAIty/media-toolkit
 ```
 The package checks if you have missing dependencies for certain file types while using. 
 Use the ```--no-deps``` flag for a minimal tiny pure python installation.
+The package with dependencies is quite small < 39kb itself.
 
 Note: for VideoFile you will also need to install [ffmpeg](https://ffmpeg.org/download.html)
 
