@@ -4,7 +4,7 @@ import mimetypes
 from typing import Union, BinaryIO
 import os
 
-from multimodal_files.dependency_requirements import requires_numpy
+from media_toolkit.dependency_requirements import requires_numpy
 
 
 try:
@@ -13,7 +13,7 @@ except ImportError:
     pass
 
 
-class MultiModalFile:
+class MediaFile:
     """
     Has file conversions that make it easy to work standardized with files across the web and in the sdk.
     Works natively with bytesio, base64 and binary data.
@@ -32,12 +32,12 @@ class MultiModalFile:
         Load a file from any supported data type. The file is loaded into the memory as bytes.
         """
         # it is already converted
-        if isinstance(data, MultiModalFile):
+        if isinstance(data, MediaFile):
             return data
 
         # conversion factory
         if type(data) in [io.BufferedReader, io.BytesIO]:
-            self.from_file(data)
+            self.from_bytesio_or_handle(data)
         elif isinstance(data, str):
             if self._is_valid_file_path(data):
                 self.from_file(data)
@@ -81,6 +81,8 @@ class MultiModalFile:
             self.from_bytesio_or_handle(path_or_handle)
         elif isinstance(path_or_handle, str):
             # read file from path
+            self.file_name = os.path.basename(path_or_handle)
+            self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
             with open(path_or_handle, 'rb') as file:
                 self.from_bytesio_or_handle(file)
 
@@ -177,12 +179,18 @@ class MultiModalFile:
         self._content_buffer.truncate(0)
 
     def save(self, path: str):
-        # create directory if not exists
-        if not os.path.exists(os.path.dirname(path)):
+        """
+        Methods saves the file to disk.
+        If path is a folder it will save it in folder/self.filename.
+        If path is a file it will save it there.
+        :param path:
+        :return:
+        """
+        # create folder if not exists
+        if os.path.dirname(path) != "" and not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
-
-        # if path includes filename save file there. If not append self.filename
-        if os.path.isdir(path):
+        # check if path contains a file name
+        if os.path.basename(path) == "":
             path = os.path.join(path, self.file_name)
 
         with open(path, 'wb') as file:
@@ -197,6 +205,7 @@ class MultiModalFile:
         # set file name and type
         if hasattr(self._content_buffer, "name"):
             self.file_name = os.path.basename(self._content_buffer.name)
+
         if self.file_name != "file":
             self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
         else:

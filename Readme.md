@@ -1,7 +1,7 @@
 
-  <h1 align="center" style="margin-top:-25px">Multimodal-files</h1>
+  <h1 align="center" style="margin-top:-25px">MediaToolkit</h1>
 <p align="center">
-  <img align="center" src="docs/multimodal_file_icon.png" height="200" />
+  <img align="center" src="docs/media-file-icon.png" height="200" />
 </p>
   <h3 align="center" style="margin-top:-10px">Web-ready standardized file processing and serialization</h3>
 
@@ -33,26 +33,29 @@ You can install the package with PIP, or clone the repository.
 
 ```bash
 # install from pypi
-pip install multimodal-files
+pip install media-toolkit
 # install without dependencies: this is useful if you only need the basic functionality
-pip install multimodal-files --no-deps
+pip install media-toolkit --no-deps
 # if you only want to use certain file types
-pip install multimodal-files[ImageFile]  # or [AudioFile, VideoFile, ...]
+pip install media-toolkit[VideoFile]  # or [AudioFile, VideoFile, ...]
 # install from github for newest release
-pip install git+git://github.com/SocAIty/multimodal-files
+pip install git+git://github.com/SocAIty/media-toolkit
 ```
 The package checks if you have missing dependencies for certain file types while using. 
 Use the ```--no-deps``` flag for a minimal tiny pure python installation.
+
+Note: for VideoFile you will also need to install [ffmpeg](https://ffmpeg.org/download.html)
 
 # Usage
 
 ## Create a multimodal-file from any data type
 The library automatically detects the data type and loads it correctly.
+
 ```python
-from multimodal_files import MultiModalFile, ImageFile, AudioFile, VideoFile
+from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
 
 # could be a path, base64, bytesio, file_handle, numpy array ...
-arbitrary_data = "...." 
+arbitrary_data = "...."
 # Instantiate a multimodal file
 new_file = ImageFile().from_any(arbitrary_data)
 ```
@@ -62,7 +65,7 @@ All files ```(ImageFile, AudioFile, VideoFile)``` types support the same interfa
 #### Explicitly load from a certain type.
 This method is more secure than from_any, because it definitely uses the correct method to load the file.
 ```python
-new_file = MultiModalFile()
+new_file = MediaFile()
 
 new_file.from_file("path/to/file")
 new_file.from_file(open("path/to/file", "rb"))
@@ -89,10 +92,82 @@ as_base64 = my_file.to_base64()
 as_json = my_file.to_json()
 ```
 
-### Easy conversion from any type
+### Working with VideoFiles.
+
+The VideoFiles wrap the famous [vidgear](https://abhitronix.github.io/vidgear/latest/) package as well as [pydub](https://github.com/jiaaro/pydub).
+VideoFiles support extra methods like audio extraction, combining video and audio.
+Vidgear is a powerful video processing library that supports many video formats and codecs and is known for fast video processing.
 
 ```python
-my_image_file = convert_to_upload_file_type(arbitrary_data, ImageFile) 
+# load the video file
+vf = VideoFile().from_file("test_files/test_video.mp4")
+
+# extract audio_file
+vf.extract_audio("extracted_audio.mp3")
+
+# stream the video
+for img, audio in vf.to_video_stream(include_audio=True):
+    cv2.imwrite("outtest.png", img)
+
+# add audio to an videofile (supports files and numpy.array)
+vf.add_audio("path/to/audio.mp3")
+
+# create a video from a folder
+VideoFile().from_dir("path/to/image_folder", audio=f"extracted_audio.mp3", frame_rate=30)
+
+# create a video from a video stream
+fromstream = VideoFile().from_video_stream(vf.to_video_stream(include_audio=True))
 ```
 
+## Web-features
 
+We intent to make transmitting files between services as easy as possible.
+Here are some examples for services and clients.
+
+### FastTaskAPI - Services
+The library supports the FastTaskAPI and FastSDK for easy file transmission between services.
+Simply use the files in the task_endpoint function definition and transmitted data will be converted.
+Check out the [FastTaskAPI]() documentation for more information.
+```python
+from fast_task_api import ImageFile, AudioFile, VideoFile
+
+@app.task_endpoint("/my_file_upload")
+def my_upload_image(image: ImageFile, audio: AudioFile, video: VideoFile):
+    image_as_np_array = np.array(image)
+```
+
+### fastAPI - services
+You can use the files in fastapi and transform the starlette upload file to a MediaFile.
+```python
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    mf = ImageFile().from_starlette_upload_file(file)
+    return {"filename": file.filename}
+```
+
+### Client with: requests, httpx
+To send a MediaFile to an openapi endpoint you can use the following method:
+
+```python
+import httpx
+
+my_media_file = ImageFile().from_file("path/to/my_image.png")
+my_files = {
+  "param_name": my_media_file.to_httpx_send_able_tuple()
+  ...
+}
+response = httpx.Client().post(url, files=my_files)
+```
+
+# How it works
+
+If multimodal-file is instantiated with ```from_*``` it converts it to an intermediate representation.
+The ```to_*``` methods then convert it to the desired format.
+
+At the moment the intermediate representation supports in memory with (BytesIO).
+
+
+# ToDo:
+
+[x] additionally support tempfile backend instead of working bytesio memory mode only.
+[x] decreasing redundancies for _file_info() method

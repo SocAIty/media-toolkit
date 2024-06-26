@@ -1,5 +1,5 @@
-from multimodal_files.dependency_requirements import requires_numpy, requires_cv2, requires
-from multimodal_files.core.multimodal_file import MultiModalFile
+from media_toolkit.dependency_requirements import requires_numpy, requires_cv2, requires
+from media_toolkit.core.media_file import MediaFile
 
 try:
     import cv2
@@ -8,7 +8,7 @@ except ImportError:
     pass
 
 
-class ImageFile(MultiModalFile):
+class ImageFile(MediaFile):
     """
     Has file conversions that make it easy to work with image files across the web.
     Internally it uses cv2 file format.

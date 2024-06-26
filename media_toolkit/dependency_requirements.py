@@ -50,3 +50,4 @@ def requires(requirements: Union[list, tuple, str], *args):
         req_func = requirement_decorator(req)
 
     return req_func
+
