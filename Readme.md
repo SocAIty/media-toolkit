@@ -49,7 +49,7 @@ Note: for VideoFile you will also need to install [ffmpeg](https://ffmpeg.org/do
 
 # Usage
 
-## Create a multimodal-file from any data type
+## Create a media-file from any data type
 The library automatically detects the data type and loads it correctly.
 
 ```python
@@ -57,7 +57,7 @@ from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
 
 # could be a path, base64, bytesio, file_handle, numpy array ...
 arbitrary_data = "...."
-# Instantiate a multimodal file
+# Instantiate an image file
 new_file = ImageFile().from_any(arbitrary_data)
 ```
 
@@ -101,7 +101,7 @@ Vidgear is a powerful video processing library that supports many video formats 
 
 ```python
 # load the video file
-vf = VideoFile().from_file("test_files/test_video.mp4")
+vf = VideoFile().from_file("test_files/test_vid_1.mp4")
 
 # extract audio_file
 vf.extract_audio("extracted_audio.mp3")
@@ -162,10 +162,10 @@ response = httpx.Client().post(url, files=my_files)
 
 # How it works
 
-If multimodal-file is instantiated with ```from_*``` it converts it to an intermediate representation.
+If media-file is instantiated with ```from_*``` it converts it to an intermediate representation.
 The ```to_*``` methods then convert it to the desired format.
 
-At the moment the intermediate representation supports in memory with (BytesIO).
+Currently the intermediate representation is supported in memory with (BytesIO).
 
 
 # ToDo:

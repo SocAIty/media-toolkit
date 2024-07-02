@@ -73,6 +73,11 @@ class MediaFile:
     def from_bytesio(self, buffer: Union[io.BytesIO, BinaryIO], copy: bool = True):
         return self.from_bytesio_or_handle(buffer=buffer, copy=copy)
 
+    #@staticmethod
+    #@overload
+    #def from_file(path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
+    #    return MediaFile().from_file(path_or_handle)
+
     def from_file(self, path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
         """
         Load a file from a file path, file handle or base64 and convert it to BytesIO.

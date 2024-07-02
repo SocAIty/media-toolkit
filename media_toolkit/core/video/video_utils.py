@@ -3,6 +3,7 @@ from typing import Union
 import tqdm
 
 from media_toolkit.dependency_requirements import requires
+import subprocess
 import os
 
 try:
@@ -46,18 +47,29 @@ def add_audio_to_video_file(
 
     try:
         # https://stackoverflow.com/questions/11779490/how-to-add-a-new-audio-not-mixing-into-a-video-using-ffmpeg
-        os.system(f"ffmpeg -i {video_file} -i {audio_file} -map 0:v -map 1:a -c:v copy -shortest {save_path}.mp4")
+        # os.system(f"ffmpeg -i {video_file} -i {audio_file} -map 0:v -map 1:a -c:v copy -shortest {save_path}.mp4")
+        p = subprocess.Popen((
+            "ffmpeg",
+            "-y", "-i", video_file, "-i", audio_file, "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+            "-shortest", save_path
+        ))
+        p.wait()
     except Exception as e:
         print(f"Error adding audio_file to video: {e}", e.__traceback__)
 
     return save_path
 
+
 @requires('pydub', 'numpy')
 def audio_array_to_audio_file(audio_array, sample_rate: int = 44100, save_path: str = None) -> str:
-    # flatten numpy array
-    # audio_array = np.concatenate(audio_array)
-    # numpy to audio_file file saved in temporary file
+    """
+    Saves an audio array to an audio file.
+    :param audio_array: A numpy array containing the audio samples.
+        Can be 1D or 2D (stereo). In form np.array([[array_frame_1], [array_frame_2], ..])
+    """
+    # audio_array in fonumpy to audio_file file saved in temporary file
     audio_array = np.array(audio_array, dtype=np.int16)
+
     channels = 2 if (audio_array.ndim == 2 and audio_array.shape[1] == 2) else 1
     song = AudioSegment(
         audio_array.tobytes(),
@@ -70,6 +82,7 @@ def audio_array_to_audio_file(audio_array, sample_rate: int = 44100, save_path: 
         save_path = temp_audio_file.name
     song.export(save_path, format="wav")
     return save_path
+
 
 @requires('pydub')
 def get_sample_rate_from_audio_file(audio_file: str) -> int:

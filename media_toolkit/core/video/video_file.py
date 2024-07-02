@@ -105,9 +105,7 @@ class VideoFile(MediaFile):
             if os.path.isfile(audio_file):
                 self.audio_sample_rate = get_sample_rate_from_audio_file(audio_file)
             else:
-
                 self.audio_sample_rate = int(mediainfo(self._to_temp_file())['sample_rate'])
-
 
         if isinstance(audio_file, list) or isinstance(audio_file, np.ndarray):
             audio_file = audio_array_to_audio_file(audio_file, sample_rate=self.audio_sample_rate)
@@ -118,6 +116,10 @@ class VideoFile(MediaFile):
         os.remove(tmp)
         os.remove(combined)
         return self
+
+    def read(self):
+        self._content_buffer.seek(0)
+        return self._content_buffer.getvalue()
 
     def _to_temp_file(self):
         # get suffix
@@ -130,16 +132,17 @@ class VideoFile(MediaFile):
             raise ValueError("The content type of the video file is not valid. Read a video file first.")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{suffix}") as temp_video_file:
-            temp_video_file.write(self._content_buffer.getvalue())
+            temp_video_file.write(self.read())
             temp_video_file_path = temp_video_file.name
 
         return temp_video_file_path
 
     @requires('vidgear', 'numpy', 'pydub')
-    def from_video_stream(self, video_audio_stream, frame_rate: int = 30):
+    def from_video_stream(self, video_audio_stream, frame_rate: int = 30, audio_sample_rate: int = 44100):
         """
         Given a generator that yields video frames and audio_file data as numpy arrays, this creates a video.
         The generator is expected to be in the form of: VideoFile().to_video_stream()
+            or a generator that yields images as numpy arrays like VideoFile().to_image_stream().
         """
         # Reset and pre-settings
         self._reset_buffer()
@@ -152,20 +155,22 @@ class VideoFile(MediaFile):
                 if len(frame) == 2:
                     frame, audio_data = frame
                     audio_frames.append(audio_data)
-            yield frame
+                yield frame
 
         # Create video
         temp_video_file_path = video_from_image_generator(_frame_gen(), frame_rate=frame_rate, save_path=None)
 
         # Add audio_file
         if len(audio_frames) > 0:
-            temp_audio_file = audio_array_to_audio_file(audio_frames, sample_rate=self.audio_sample_rate)
+            temp_audio_file = audio_array_to_audio_file(audio_frames, sample_rate=audio_sample_rate)
             combined = add_audio_to_video_file(temp_video_file_path, temp_audio_file)
             self.from_file(combined)
             # cleanup
             os.remove(temp_audio_file)
             os.remove(temp_video_file_path)
             os.remove(combined)
+
+        return self
 
     @requires('cv2', 'pydub')
     def _file_info(self):
