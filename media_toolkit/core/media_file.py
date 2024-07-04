@@ -4,7 +4,6 @@ import mimetypes
 from tempfile import SpooledTemporaryFile
 from typing import Union, BinaryIO
 import os
-
 from media_toolkit.dependency_requirements import requires_numpy
 
 
@@ -56,7 +55,7 @@ class MediaFile:
 
     def from_bytesio_or_handle(
         self,
-        buffer: Union[io.BytesIO, BinaryIO, io.BufferedReader, SpooledTemporaryFile],
+        buffer: Union[io.BytesIO, BinaryIO, io.BufferedReader],
         copy: bool = True
     ):
         """
@@ -65,14 +64,14 @@ class MediaFile:
         :params copy: If true, the buffer is completely read to bytes and the bytes copied to this file.
             If false file works with the provided buffer. Danger -- The buffer is kept open.
         """
-        if not type(buffer) in [io.BytesIO, io.BufferedReader, SpooledTemporaryFile]:
+        if not type(buffer) in [io.BytesIO, io.BufferedReader]:
             raise ValueError(f"Buffer must be of type BytesIO or BufferedReader. Got {type(buffer)}")
 
         self._reset_buffer()
         buffer.seek(0)
 
         # setting path is needed in order that file_info can work properly
-        if type(buffer) in [SpooledTemporaryFile, io.BufferedReader]:
+        if type(buffer) in [io.BufferedReader]:
             self.path = buffer.name
 
         if not copy:
@@ -123,13 +122,12 @@ class MediaFile:
         :param starlette_upload_file:
         :return:
         """
-        return self.from_bytesio_or_handle(starlette_upload_file.file)
-        #content = starlette_upload_file.file.read()
-#
-        #self.file_name = starlette_upload_file.filename
-        #self.content_type = starlette_upload_file.content_type
-        #self.from_bytes(content)
-       # return self
+        # in file info all the meta is retrieved from the file.name in case of buffered reader
+        content = starlette_upload_file.file.read()
+        self.file_name = starlette_upload_file.filename
+        self.content_type = starlette_upload_file.content_type
+        self.from_bytes(content)
+        return self
 
     def from_base64(self, base64_str: str):
         """
@@ -242,7 +240,8 @@ class MediaFile:
             self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
         elif hasattr(self._content_buffer, "name"):
             self.file_name = os.path.basename(self._content_buffer.name)
-        else:
+
+        if self.content_type is None:
             self.content_type = "application/octet-stream"
 
     def __bytes__(self):

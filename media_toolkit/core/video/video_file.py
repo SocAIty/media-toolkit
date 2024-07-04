@@ -6,10 +6,10 @@ from io import BytesIO
 from typing import List, Union
 
 from media_toolkit.core.video.video_utils import (add_audio_to_video_file, audio_array_to_audio_file,
-                                                  video_from_image_generator, get_audio_sample_rate_from_file)
+                                                  video_from_image_generator, get_audio_sample_rate_from_file,
+                                                  SimpleGeneratorWrapper)
 from media_toolkit.dependency_requirements import requires
 from media_toolkit.core.media_file import MediaFile
-
 
 try:
     import cv2
@@ -33,6 +33,7 @@ class VideoFile(MediaFile):
     """
     A class to represent a video file.
     """
+
     def __init__(self):
         super().__init__()
         self.content_type = "video"
@@ -159,16 +160,25 @@ class VideoFile(MediaFile):
 
         # new generator, to extract audio_file
         audio_frames = []
+
         def _frame_gen():
             for frame in video_audio_stream:
                 # check if is video and audio_file stream or only video stream
-                if len(frame) == 2:
+                if isinstance(frame, tuple) and len(frame) == 2:
                     frame, audio_data = frame
+                    if audio_data is None:
+                        audio_data = np.zeros(0)
+                        print("Warning: Audio data is None. Adding silence in frame.")
                     audio_frames.append(audio_data)
                 yield frame
 
+        # allows tqdm to work with the generator
+        video_gen_wrapper = _frame_gen()
+        if hasattr(video_audio_stream, '__len__'):
+            video_gen_wrapper = SimpleGeneratorWrapper(video_gen_wrapper, length=len(video_audio_stream))
+
         # Create video
-        temp_video_file_path = video_from_image_generator(_frame_gen(), frame_rate=frame_rate, save_path=None)
+        temp_video_file_path = video_from_image_generator(video_gen_wrapper, frame_rate=frame_rate, save_path=None)
 
         # Add audio_file
         if len(audio_frames) > 0:
@@ -187,7 +197,7 @@ class VideoFile(MediaFile):
 
     @requires('cv2', 'pydub')
     def _file_info(self):
-        super()._file_info()   # sets: file_name, content_type.
+        super()._file_info()  # sets: file_name, content_type.
 
         # care for the case that it was loaded from_bytes what usually does not provide any filename / info.
         # In this case we need to write the data first to file and then retrieve the info again.
@@ -200,6 +210,7 @@ class VideoFile(MediaFile):
 
         # get video info
         info = mediainfo(path)
+
         def info_to_number(key: str, default_val=None):
             if key in info:
                 val = info[key]
@@ -210,7 +221,6 @@ class VideoFile(MediaFile):
                 return float(val)
             return default_val
 
-
         self.frame_count = info_to_number('nb_frames')
         self.duration = info_to_number('duration')
         self.width = info_to_number('width')
@@ -218,15 +228,15 @@ class VideoFile(MediaFile):
         self.shape = (self.width, self.height)
         self.audio_sample_rate = info_to_number('sample_rate', 44100)
 
-        # need to determine the frame rate with cv2 because pydub calculation gives some weird results..
         self.frame_rate = info_to_number('avg_frame_rate', None)
-
-        if self.frame_rate is None:
+        # need to determine the frame rate with cv2 because pydub calculation gives some weird results..
+        if self.frame_rate is None or self.frame_count is None or self.frame_count == 1:
             cap = cv2.VideoCapture(path)
             self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
+            self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             cap.release()
 
-        #if self.width is None or self.height is None:
+        # if self.width is None or self.height is None:
         #    # try to get it with cv2
         #    cap = cv2.VideoCapture(path)
         #    self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -234,7 +244,7 @@ class VideoFile(MediaFile):
         #    self.shape = (self.width, self.height)
         #    self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
         #    cap.release()
-        #else:
+        # else:
         #    if self.frame_count is not None and self.duration is not None:
         #        self.frame_rate = int(self.frame_count / self.duration)
 
@@ -294,6 +304,10 @@ class VideoFile(MediaFile):
 
                 # Convert audio_file segment to raw data
                 audio_data = np.array(frame_audio.get_array_of_samples())
+
+                if audio_data is None:
+                    # sometimes in a frame theres no audio data. Then we need to fill it with silence.
+                    audio_data = np.zeros(0)
 
                 # Yield the frame and the corresponding audio_file data
                 yield frame, audio_data

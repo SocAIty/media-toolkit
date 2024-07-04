@@ -106,10 +106,18 @@ def video_from_image_generator(image_generator, save_path: str = None, frame_rat
     if save_path is None:
         tempf = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         save_path = tempf.name
+
+    # make a nice progress bar
+    if hasattr(image_generator, "__len__"):
+        image_generator = tqdm.tqdm(enumerate(image_generator), total=len(image_generator))
+    else:
+        image_generator = tqdm.tqdm(enumerate(image_generator))
+
     # Write the video
     output_params = {"-input_framerate": frame_rate}  # ffmpeg params
     writer = WriteGear(output=save_path, compression_mode=True, **output_params)
-    for i, img in tqdm.tqdm(enumerate(image_generator)):
+
+    for i, img in image_generator:
         try:
             if isinstance(img, str):
                 img = cv2.imread(img)
@@ -123,3 +131,19 @@ def video_from_image_generator(image_generator, save_path: str = None, frame_rat
     # Safely close the writer
     writer.close()
     return save_path
+
+
+class SimpleGeneratorWrapper:
+    """
+    Transforms a generator function into an iterable object with a length property.
+    This is useful for example in tqdm
+    """
+    def __init__(self, generator, length):
+        self.generator = generator
+        self.length = length
+
+    def __iter__(self):
+        return self.generator
+
+    def __len__(self):
+        return self.length
