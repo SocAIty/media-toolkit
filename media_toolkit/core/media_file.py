@@ -1,6 +1,7 @@
 import base64
 import io
 import mimetypes
+from tempfile import SpooledTemporaryFile
 from typing import Union, BinaryIO
 import os
 
@@ -25,6 +26,7 @@ class MediaFile:
         """
         self.content_type = content_type
         self.file_name = file_name  # the name of the file also when specified in bytesio
+        self.path = None    # the path of the file if it was provided. Is also indicator if file was loaded from file.
         self._content_buffer = io.BytesIO()
 
     def from_any(self, data):
@@ -52,21 +54,33 @@ class MediaFile:
 
         return self
 
-    def from_bytesio_or_handle(self, buffer: Union[io.BytesIO, BinaryIO, io.BufferedReader], copy: bool = True):
+    def from_bytesio_or_handle(
+        self,
+        buffer: Union[io.BytesIO, BinaryIO, io.BufferedReader, SpooledTemporaryFile],
+        copy: bool = True
+    ):
         """
         Set the content of the file from a BytesIO or a file handle.
         :params buffer: The buffer to read from.
         :params copy: If true, the buffer is completely read to bytes and the bytes copied to this file.
+            If false file works with the provided buffer. Danger -- The buffer is kept open.
         """
+        if not type(buffer) in [io.BytesIO, io.BufferedReader, SpooledTemporaryFile]:
+            raise ValueError(f"Buffer must be of type BytesIO or BufferedReader. Got {type(buffer)}")
+
         self._reset_buffer()
-        if type(buffer) in [io.BytesIO, io.BufferedReader]:
+        buffer.seek(0)
+
+        # setting path is needed in order that file_info can work properly
+        if type(buffer) in [SpooledTemporaryFile, io.BufferedReader]:
+            self.path = buffer.name
+
+        if not copy:
+            self._content_buffer = buffer
+            self._file_info()
+        else:
+            self.from_bytes(buffer.read())  # calls self._file_info also
             buffer.seek(0)
-            if not copy:
-                self._content_buffer = buffer
-                self._file_info()
-            else:
-                self.from_bytes(buffer.read())
-                buffer.seek(0)
 
         return self
 
@@ -86,10 +100,13 @@ class MediaFile:
             self.from_bytesio_or_handle(path_or_handle)
         elif isinstance(path_or_handle, str):
             # read file from path
-            self.file_name = os.path.basename(path_or_handle)
-            self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
+            if not os.path.exists(path_or_handle):
+                raise FileNotFoundError(f"File {path_or_handle} not found.")
+
+            self.path = path_or_handle
+            # self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
             with open(path_or_handle, 'rb') as file:
-                self.from_bytesio_or_handle(file)
+                self.from_bytesio_or_handle(file)  # method also calls self._file_info.
 
         return self
 
@@ -106,14 +123,19 @@ class MediaFile:
         :param starlette_upload_file:
         :return:
         """
-        content = starlette_upload_file.file.read()
-
-        self.file_name = starlette_upload_file.filename
-        self.content_type = starlette_upload_file.content_type
-        self.from_bytes(content)
-        return self
+        return self.from_bytesio_or_handle(starlette_upload_file.file)
+        #content = starlette_upload_file.file.read()
+#
+        #self.file_name = starlette_upload_file.filename
+        #self.content_type = starlette_upload_file.content_type
+        #self.from_bytes(content)
+       # return self
 
     def from_base64(self, base64_str: str):
+        """
+        Load a file which was encoded as a base64 string.
+        """
+
         decoded = self._decode_base_64_if_is(base64_str)
         if decoded is not None:
             return self.from_bytes(base64.b64decode(base64_str))
@@ -207,12 +229,19 @@ class MediaFile:
         For videos this might be length, frame rate...
         If you subclass don't forget to call super()._file_info() to set the file name and content type.
         """
-        # set file name and type
-        if hasattr(self._content_buffer, "name"):
-            self.file_name = os.path.basename(self._content_buffer.name)
-
-        if self.file_name != "file":
+        # cases when file_info is called
+        # from_file -> retrieve info directly from the file path
+        # from bytesio -> tempfile
+        # from bytes -> tempfile
+        # from buffered_reader -> set path -> from bytes -> get info from previously set file_path
+        # from np_array -> tempfile
+        # from starlette_upload_file -> from_buffered_reader(spooled_temporary) -> info from the spooled_temporary
+        # from base64 -> from-bytes -> tempfile
+        if self.path is not None:
+            self.file_name = os.path.basename(self.path)
             self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
+        elif hasattr(self._content_buffer, "name"):
+            self.file_name = os.path.basename(self._content_buffer.name)
         else:
             self.content_type = "application/octet-stream"
 

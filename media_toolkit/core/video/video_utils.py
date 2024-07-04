@@ -1,6 +1,7 @@
 import tempfile
 from typing import Union
 import tqdm
+from pydub.utils import mediainfo
 
 from media_toolkit.dependency_requirements import requires
 import subprocess
@@ -61,7 +62,7 @@ def add_audio_to_video_file(
 
 
 @requires('pydub', 'numpy')
-def audio_array_to_audio_file(audio_array, sample_rate: int = 44100, save_path: str = None) -> str:
+def audio_array_to_audio_file(audio_array, sample_rate: int = 44100, save_path: str = None, audio_format: str = "mp3") -> str:
     """
     Saves an audio array to an audio file.
     :param audio_array: A numpy array containing the audio samples.
@@ -70,7 +71,7 @@ def audio_array_to_audio_file(audio_array, sample_rate: int = 44100, save_path: 
     # audio_array in fonumpy to audio_file file saved in temporary file
     audio_array = np.array(audio_array, dtype=np.int16)
 
-    channels = 2 if (audio_array.ndim == 2 and audio_array.shape[1] == 2) else 1
+    channels = 2 if audio_array.ndim == 2 else 1
     song = AudioSegment(
         audio_array.tobytes(),
         frame_rate=sample_rate,
@@ -78,16 +79,19 @@ def audio_array_to_audio_file(audio_array, sample_rate: int = 44100, save_path: 
         channels=channels
     )
     if save_path is None:
-        temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=f".{audio_format}")
         save_path = temp_audio_file.name
-    song.export(save_path, format="wav")
+    song.export(save_path, format=audio_format)
     return save_path
 
 
 @requires('pydub')
-def get_sample_rate_from_audio_file(audio_file: str) -> int:
-    audio = AudioSegment.from_file(audio_file)
-    return audio.frame_rate
+def get_audio_sample_rate_from_file(file_path: str) -> int:
+    info = mediainfo(file_path)
+    if "sample_rate" not in info:
+        raise ValueError("The audio file does not have a sample rate.")
+
+    return int(info['sample_rate'])
 
 
 @requires('vidgear', 'numpy', 'cv2')

@@ -6,7 +6,7 @@ from io import BytesIO
 from typing import List, Union
 
 from media_toolkit.core.video.video_utils import (add_audio_to_video_file, audio_array_to_audio_file,
-                                                     video_from_image_generator, get_sample_rate_from_audio_file)
+                                                  video_from_image_generator, get_audio_sample_rate_from_file)
 from media_toolkit.dependency_requirements import requires
 from media_toolkit.core.media_file import MediaFile
 
@@ -36,9 +36,12 @@ class VideoFile(MediaFile):
     def __init__(self):
         super().__init__()
         self.content_type = "video"
-        self.frame_count = None  # an estimated value based on cv2.VideoCapture.get(cv2.CAP_PROP_FRAME_COUNT)
+        self.frame_count = None
         self.frame_rate = None
+        self.width = None
+        self.height = None
         self.shape = None
+        self.duration = None
         self.audio_sample_rate = None
 
     def from_files(self, image_files: Union[List[str], list], frame_rate: int = 30, audio_file=None):
@@ -98,17 +101,24 @@ class VideoFile(MediaFile):
         return self.from_files(image_files=image_files, frame_rate=frame_rate, audio_file=audio)
 
     def add_audio(self, audio_file: Union[str, list], sample_rate: int = 44100):
+        """
+        Adds audio to the video file.
+        :param audio_file: The audio_file file to add to the video, as path, or numpy array.
+            In case of a file, the sample rate is determined from the file.
+        :param sample_rate: If the audio_file is a numpy array, the sample rate should be provided.
+        """
+
         if self.audio_sample_rate is None:
             if self.frame_rate is None:
                 raise Exception("The frame rate of the video file is not set. Read a video file first.")
 
             if os.path.isfile(audio_file):
-                self.audio_sample_rate = get_sample_rate_from_audio_file(audio_file)
+                self.audio_sample_rate = get_audio_sample_rate_from_file(audio_file)
             else:
-                self.audio_sample_rate = int(mediainfo(self._to_temp_file())['sample_rate'])
+                self.audio_sample_rate = get_audio_sample_rate_from_file(self._to_temp_file())
 
         if isinstance(audio_file, list) or isinstance(audio_file, np.ndarray):
-            audio_file = audio_array_to_audio_file(audio_file, sample_rate=self.audio_sample_rate)
+            audio_file = audio_array_to_audio_file(audio_file, sample_rate=sample_rate)
 
         tmp = self._to_temp_file()
         combined = add_audio_to_video_file(tmp, audio_file)
@@ -169,38 +179,74 @@ class VideoFile(MediaFile):
             os.remove(temp_audio_file)
             os.remove(temp_video_file_path)
             os.remove(combined)
+        else:
+            self.from_file(temp_video_file_path)
+            os.remove(temp_video_file_path)
 
         return self
 
     @requires('cv2', 'pydub')
     def _file_info(self):
-        super()._file_info()
+        super()._file_info()   # sets: file_name, content_type.
 
-        #if file_path is not None:
-        #    temp = file_path
+        # care for the case that it was loaded from_bytes what usually does not provide any filename / info.
+        # In this case we need to write the data first to file and then retrieve the info again.
+        path = self.path
+        is_temp_file = False
+        if path is None or not os.path.exists(path):
+            self._content_buffer.seek(0)
+            path = self._to_temp_file()
+            is_temp_file = True
+
+        # get video info
+        info = mediainfo(path)
+        def info_to_number(key: str, default_val=None):
+            if key in info:
+                val = info[key]
+                if val == 'N/A':
+                    return default_val
+                # split if / in val and take first
+                val = val.split("/")[0]
+                return float(val)
+            return default_val
+
+
+        self.frame_count = info_to_number('nb_frames')
+        self.duration = info_to_number('duration')
+        self.width = info_to_number('width')
+        self.height = info_to_number('height')
+        self.shape = (self.width, self.height)
+        self.audio_sample_rate = info_to_number('sample_rate', 44100)
+
+        # need to determine the frame rate with cv2 because pydub calculation gives some weird results..
+        self.frame_rate = info_to_number('avg_frame_rate', None)
+
+        if self.frame_rate is None:
+            cap = cv2.VideoCapture(path)
+            self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
+
+        #if self.width is None or self.height is None:
+        #    # try to get it with cv2
+        #    cap = cv2.VideoCapture(path)
+        #    self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        #    self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        #    self.shape = (self.width, self.height)
+        #    self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
+        #    cap.release()
         #else:
-        self._content_buffer.seek(0)
-        temp = self._to_temp_file()
+        #    if self.frame_count is not None and self.duration is not None:
+        #        self.frame_rate = int(self.frame_count / self.duration)
 
-        cap = cv2.VideoCapture(temp)
-        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # is an estimated value.
-        # determine content codec
-        # https://stackoverflow.com/questions/61659346/how-to-get-4-character-codec-code-for-videocapture-object-in-opencv
-        # h = int(cap.get(cv2.CAP_PROP_FOURCC))
-        # b = h.to_bytes(4, byteorder=sys.byteorder)
-        # codec = b.decode()  # results in the codec
-        self.content_type = f"video/mp4"
-        self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
-        self.shape = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-        cap.release()
-        # get audio sample rate
-        info = mediainfo(temp)
-        if 'sample_rate' in info:
-            try:
-                self.audio_sample_rate = int(info['sample_rate'])
-            except ValueError:
-                self.audio_sample_rate = 44100
-        os.remove(temp)
+        if 'format_name' in info:
+            format_name = info['format_name'].split(",")[0]
+            self.content_type = f"video/{format_name}"
+        else:
+            self.content_type = "video/mp4"  # overwrite default "application/octet-stream"
+
+        # if is tempfile remove it
+        if is_temp_file:
+            os.remove(path)
 
     @requires('vidgear')
     def to_image_stream(self):
@@ -220,12 +266,16 @@ class VideoFile(MediaFile):
 
         if include_audio:
             # Extract audio_file using pydub
-            audio = AudioSegment.from_file(temp_video_file_path)
-            # Calculate the audio_file segment duration per frame
-            audio_per_frame_duration = 1000 / stream.framerate  # duration of each video frame in ms
-            # Initialize frame counter for audio_file
-            frame_count = 0
+            try:
+                audio = AudioSegment.from_file(temp_video_file_path)
+                # Calculate the audio_file segment duration per frame
+                audio_per_frame_duration = 1000 / stream.framerate  # duration of each video frame in ms
+            except:
+                include_audio = False
+                print("Could not extract audio_file from video file. Audio will not be included in the video stream.")
 
+        # Initialize frame counter for audio_file and better self.frame count
+        frame_count = 0
         try:
             while True:
                 # Read frame
@@ -259,7 +309,7 @@ class VideoFile(MediaFile):
             self.frame_count = frame_count
 
     @requires('pydub')
-    def extract_audio(self, path: str = None, export_type: str = 'mp4') -> Union[bytes, None]:
+    def extract_audio(self, path: str = None, export_type: str = 'mp3') -> Union[bytes, None]:
         temp_video_file_path = self._to_temp_file()
         audio = AudioSegment.from_file(temp_video_file_path)
 

@@ -9,10 +9,10 @@ import cv2
 outdir = "outdir/"
 
 # test video files
-#test_video = "test_files/test_vid_1.mp4"
+#test_video = "test_files/test_video.mp4"
 #vf = VideoFile().from_file(test_video)
 #### extract audio_file
-##vf.extract_audio(f"{outdir}/extracted_audio.mp3")
+#vf.extract_audio(f"{outdir}/extracted_audio.mp3")
 ##audio_bytes = vf.extract_audio()
 #
 ### test video streaming
