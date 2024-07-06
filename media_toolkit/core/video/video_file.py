@@ -286,6 +286,7 @@ class VideoFile(MediaFile):
 
         # Initialize frame counter for audio_file and better self.frame count
         frame_count = 0
+        audio_shape = None  # if the audio in a frame is to short or mishaped fill it with silence.
         try:
             while True:
                 # Read frame
@@ -305,9 +306,21 @@ class VideoFile(MediaFile):
                 # Convert audio_file segment to raw data
                 audio_data = np.array(frame_audio.get_array_of_samples())
 
+                # CODE TO DEAL WITH ERRORS AND IMPUTE VALUES
+                # save the first shape of the audio data
+                if audio_shape is None and len(audio_data) > 0:
+                    audio_shape = audio_data.shape
+
                 if audio_data is None:
                     # sometimes in a frame theres no audio data. Then we need to fill it with silence.
-                    audio_data = np.zeros(0)
+                    audio_data = np.zeros(audio_shape)
+
+                # impute missing values or cut too long audio arrays
+                if audio_shape is not None:
+                    if len(audio_data) < audio_shape[0]:
+                        audio_data = np.pad(audio_data, (0, audio_shape[0] - len(audio_data)), 'constant')
+                    elif len(audio_data) > audio_shape[0]:
+                        audio_data = audio_data[:len(audio_shape)]
 
                 # Yield the frame and the corresponding audio_file data
                 yield frame, audio_data

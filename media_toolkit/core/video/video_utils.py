@@ -68,7 +68,7 @@ def audio_array_to_audio_file(audio_array, sample_rate: int = 44100, save_path: 
     :param audio_array: A numpy array containing the audio samples.
         Can be 1D or 2D (stereo). In form np.array([[array_frame_1], [array_frame_2], ..])
     """
-    # audio_array in fonumpy to audio_file file saved in temporary file
+    # audio_array in fom numpy to audio_file file saved in temporary file
     audio_array = np.array(audio_array, dtype=np.int16)
 
     channels = 2 if audio_array.ndim == 2 else 1
@@ -115,7 +115,7 @@ def video_from_image_generator(image_generator, save_path: str = None, frame_rat
 
     # Write the video
     output_params = {"-input_framerate": frame_rate}  # ffmpeg params
-    writer = WriteGear(output=save_path, compression_mode=True, **output_params)
+    writer = WriteGear(output=save_path, compression_mode=True, logging=True, **output_params)
 
     for i, img in image_generator:
         try:
