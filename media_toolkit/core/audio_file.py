@@ -12,7 +12,6 @@ except ImportError:
 class AudioFile(MediaFile):
     """
     Has file conversions that make it easy to work with image files across the web.
-    Internally it uses numpy and librosa.
     """
     @requires('soundfile')
     def to_soundfile(self):
@@ -27,12 +26,11 @@ class AudioFile(MediaFile):
         return audio
 
     @requires('soundfile')
-    def from_np_array(self, np_array, sr: int = None, file_type: str = "wav"):
-        sr = 22050 if sr is None else sr
+    def from_np_array(self, np_array, sr: int = 44100, file_type: str = "wav"):
+        sr = 44100 if sr is None else sr  # 22050
         # write to virtual file with librosa
         virtual_file = io.BytesIO()
         virtual_file.name = f"audio_file.{file_type}"
         soundfile.write(virtual_file, np_array, samplerate=sr, format=file_type)
-
-        super().from_file(virtual_file)
+        return super().from_file(virtual_file)
 
