@@ -1,14 +1,13 @@
 import glob
 import os
-import sys
 import tempfile
 from io import BytesIO
 from typing import List, Union
 
 from media_toolkit.core.video.video_utils import (add_audio_to_video_file, audio_array_to_audio_file,
-                                                  video_from_image_generator, get_audio_sample_rate_from_file,
-                                                  SimpleGeneratorWrapper)
-from media_toolkit.dependency_requirements import requires
+                                                  video_from_image_generator, get_audio_sample_rate_from_file)
+from media_toolkit.utils.generator_wrapper import SimpleGeneratorWrapper
+from media_toolkit.utils.dependency_requirements import requires
 from media_toolkit.core.media_file import MediaFile
 
 try:

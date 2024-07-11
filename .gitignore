@@ -5,6 +5,8 @@ test/*.jpg
 test/*.jpeg
 test/*.mp4
 test/*.mp3
+tests/*.usd
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -15,7 +15,7 @@ outdir = "outdir/"
 #vf.extract_audio(f"{outdir}/extracted_audio.mp3")
 ##audio_bytes = vf.extract_audio()
 #
-### test video streaming
+### test video clients
 #audio_array = []
 #image_paths = []
 #for i, (img, audio_part) in tqdm(enumerate(vf.to_video_stream(include_audio=True))):
@@ -34,6 +34,6 @@ outdir = "outdir/"
 fromdir = VideoFile().from_dir(outdir, audio=f"{outdir}/extracted_audio.mp3", frame_rate=30)
 fromdir.save(f"{outdir}/test_from_dir.mp4")
 
-# test video streaming with audio_file
+# test video clients with audio_file
 fromstream = VideoFile().from_video_stream(fromdir.to_video_stream(include_audio=True))
 fromstream.save(f"{outdir}/test_from_stream.mp4")

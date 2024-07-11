@@ -3,7 +3,7 @@ from typing import Union
 import tqdm
 from pydub.utils import mediainfo
 
-from media_toolkit.dependency_requirements import requires
+from media_toolkit.utils.dependency_requirements import requires
 import subprocess
 import os
 
@@ -133,17 +133,3 @@ def video_from_image_generator(image_generator, save_path: str = None, frame_rat
     return save_path
 
 
-class SimpleGeneratorWrapper:
-    """
-    Transforms a generator function into an iterable object with a length property.
-    This is useful for example in tqdm
-    """
-    def __init__(self, generator, length):
-        self.generator = generator
-        self.length = length
-
-    def __iter__(self):
-        return self.generator
-
-    def __len__(self):
-        return self.length

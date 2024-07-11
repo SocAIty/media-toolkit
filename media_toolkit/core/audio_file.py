@@ -1,6 +1,8 @@
-from media_toolkit.dependency_requirements import requires
+from media_toolkit.utils.dependency_requirements import requires
 from media_toolkit.core.media_file import MediaFile
 import io
+
+from media_toolkit.utils.generator_wrapper import SimpleGeneratorWrapper
 
 try:
     import soundfile
@@ -34,3 +36,23 @@ class AudioFile(MediaFile):
         soundfile.write(virtual_file, np_array, samplerate=sr, format=file_type)
         return super().from_file(virtual_file)
 
+    @requires('soundfile')
+    def to_stream(self, chunks_per_second: int = 10):
+        """
+        Generator that yields audio chunks of 1/chunks_per_second as numpy arrays.
+        :param chunks_per_second: Number of chunks per second
+        :return: Generator that yields numpy arrays with audio data.
+        """
+
+        audio, sample_rate = self.to_soundfile()
+        chunk_size = sample_rate // chunks_per_second
+        n_chunks = len(audio) // chunk_size + 1
+
+        def generator():
+            for i in range(n_chunks):
+                chunk = audio[i * chunk_size: i * chunk_size + chunk_size]
+                yield chunk.astype(np.float32) #.tobytes()
+
+        g = SimpleGeneratorWrapper(generator=generator(), length=n_chunks)
+        g.sample_rate = sample_rate
+        return g

@@ -1,10 +1,9 @@
 import base64
 import io
 import mimetypes
-from tempfile import SpooledTemporaryFile
 from typing import Union, BinaryIO
 import os
-from media_toolkit.dependency_requirements import requires_numpy
+from media_toolkit.utils.dependency_requirements import requires_numpy
 
 
 try:
@@ -191,6 +190,7 @@ class MediaFile:
         return res
 
     def to_bytes_io(self) -> io.BytesIO:
+        self._content_buffer.seek(0)
         return self._content_buffer
 
     def to_base64(self):
