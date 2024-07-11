@@ -1,7 +1,6 @@
 import tempfile
 from typing import Union
 import tqdm
-from pydub.utils import mediainfo
 
 from media_toolkit.utils.dependency_requirements import requires
 import subprocess
@@ -9,6 +8,7 @@ import os
 
 try:
     from pydub import AudioSegment
+    from pydub.utils import mediainfo
 except ImportError:
     pass
 
