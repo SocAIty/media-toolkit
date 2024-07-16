@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "media-toolkit"
-version = "0.0.5"
+version = "0.0.6"
 description = "Web-ready standardized file processing and serialization. Read, load and convert to standard file types with a common interface."
 requires-python = ">=3.8"
 authors = [
