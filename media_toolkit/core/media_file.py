@@ -203,7 +203,7 @@ class MediaFile:
         self._content_buffer.seek(0)
         self._content_buffer.truncate(0)
 
-    def save(self, path: str):
+    def save(self, path: str = None):
         """
         Methods saves the file to disk.
         If path is a folder it will save it in folder/self.filename.
@@ -211,12 +211,23 @@ class MediaFile:
         :param path:
         :return:
         """
+        # set to working directory if path is None
+        if path is None:
+            path = os.path.curdir
         # create folder if not exists
-        if os.path.dirname(path) != "" and not os.path.exists(os.path.dirname(path)):
+        elif os.path.dirname(path) != "" and not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
-        # check if path contains a file name
-        if os.path.basename(path) == "":
+
+        # check if path contains a file name add default if not given
+        if os.path.isdir(path):
+            if self.file_name is None:
+                self.file_name = "media_toolkit_output"
+                print(f"No file name given. Using {self.file_name}")
             path = os.path.join(path, self.file_name)
+
+        # check if has extension
+        #if os.path.splitext(path)[1] == "":
+        #    path += ".mp4"
 
         with open(path, 'wb') as file:
             file.write(self.read())
