@@ -70,6 +70,8 @@ def audio_array_to_audio_file(audio_array, sample_rate: int = 44100, save_path: 
     """
     # audio_array in fom numpy to audio_file file saved in temporary file
     audio_array = np.array(audio_array, dtype=np.int16)
+    # remove faulty channels
+
 
     channels = 2 if audio_array.ndim == 2 else 1
     song = AudioSegment(

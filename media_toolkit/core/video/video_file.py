@@ -181,16 +181,21 @@ class VideoFile(MediaFile):
 
         # Add audio_file
         if len(audio_frames) > 0:
-            temp_audio_file = audio_array_to_audio_file(audio_frames, sample_rate=audio_sample_rate)
-            combined = add_audio_to_video_file(temp_video_file_path, temp_audio_file)
-            self.from_file(combined)
-            # cleanup
-            os.remove(temp_audio_file)
-            os.remove(temp_video_file_path)
-            os.remove(combined)
-        else:
-            self.from_file(temp_video_file_path)
-            os.remove(temp_video_file_path)
+            try:
+                temp_audio_file = audio_array_to_audio_file(audio_frames, sample_rate=audio_sample_rate)
+                combined = add_audio_to_video_file(temp_video_file_path, temp_audio_file)
+                self.from_file(combined)
+                # cleanup
+                os.remove(temp_audio_file)
+                os.remove(temp_video_file_path)
+                os.remove(combined)
+                return self
+            except Exception as e:
+                print(f"Error adding audio_file to video. Returning video without audio. {e.__traceback__} ")
+
+        # if no audio_file was added
+        self.from_file(temp_video_file_path)
+        os.remove(temp_video_file_path)
 
         return self
 
