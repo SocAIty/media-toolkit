@@ -196,7 +196,6 @@ class VideoFile(MediaFile):
         # if no audio_file was added
         self.from_file(temp_video_file_path)
         os.remove(temp_video_file_path)
-
         return self
 
     @requires('cv2', 'pydub')
@@ -324,7 +323,7 @@ class VideoFile(MediaFile):
                     if len(audio_data) < audio_shape[0]:
                         audio_data = np.pad(audio_data, (0, audio_shape[0] - len(audio_data)), 'constant')
                     elif len(audio_data) > audio_shape[0]:
-                        audio_data = audio_data[:len(audio_shape)]
+                        audio_data = audio_data[:audio_shape[0]]
 
                 # Yield the frame and the corresponding audio_file data
                 yield frame, audio_data
