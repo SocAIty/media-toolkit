@@ -96,7 +96,8 @@ class VideoFile(MediaFile):
                 audio = glob.glob(os.path.join(dir_path, audio_type))
                 if len(audio) > 0:
                     audio = audio[0]
-                    break
+                else:
+                    audio = None
 
         return self.from_files(image_files=image_files, frame_rate=frame_rate, audio_file=audio)
 

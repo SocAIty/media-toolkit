@@ -97,12 +97,20 @@ def get_audio_sample_rate_from_file(file_path: str) -> int:
 
 
 @requires('vidgear', 'numpy', 'cv2')
-def video_from_image_generator(image_generator, save_path: str = None, frame_rate: int = 30):
+def video_from_image_generator(
+        image_generator,
+        save_path: str = None,
+        frame_rate: int = 30,
+        ffmpeg_params: dict = None
+):
     """
     Creates a video from an image generator. The image generator should yield images as numpy arrays or filepaths.
     Returns a path to a tempfile if save_path is None, otherwise saves the video to the save_path.
         Don't forget to delete the tempfile later.
-    :param image_generator: A generator or iterable that yields images as numpy arrays or filepaths.
+    :param image_generator: A generator or iterable that yields images as numpy arrays (BGR) or filepaths.
+    :param save_path: The path to save the video to. If None, a tempfile is created.
+    :param frame_rate: The frame rate of the video.
+    :param ffmpeg_params: Additional ffmpeg parameters. In form {"-vcodec": "h264", "-f": "mp4", "-pix_fmt": "yuv420p"}
     """
     # if save_path is None, return a VideoFile object
     if save_path is None:
@@ -115,8 +123,16 @@ def video_from_image_generator(image_generator, save_path: str = None, frame_rat
     else:
         image_generator = tqdm.tqdm(enumerate(image_generator))
 
+    if ffmpeg_params is None:
+        ffmpeg_params = {
+            "-vcodec": "h264",
+            "-f": "mp4",
+            "-pix_fmt": "yuv420p"
+        }
+
     # Write the video
-    output_params = {"-input_framerate": frame_rate}  # ffmpeg params
+    output_params = {"-input_framerate": frame_rate}
+    output_params.update(ffmpeg_params)  # ffmpeg params
     writer = WriteGear(output=save_path, compression_mode=True, logging=True, **output_params)
 
     for i, img in image_generator:
@@ -125,7 +141,7 @@ def video_from_image_generator(image_generator, save_path: str = None, frame_rat
                 img = cv2.imread(img)
             if not isinstance(img, np.ndarray):
                 raise ValueError("The image generator should yield images as numpy arrays or filepaths.")
-            writer.write(img)
+            writer.write(img, rgb_mode=False)  # expecting BGR
         except Exception as e:
             file_name = img if isinstance(img, str) else f"image_{i}"
             print(f"Error reading {file_name}: {e}. Skipping frame {i}")
