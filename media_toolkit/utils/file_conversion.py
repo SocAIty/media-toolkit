@@ -1,4 +1,40 @@
+import os.path
+from typing import Union
+import mimetypes
 from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
+
+
+def guess_file_type(file_path: str) -> str:
+    """
+    Guesses the type of the file based on the file extension.
+    :param file_path: The file path to guess the type of.
+    :return: The guessed file type.
+    """
+    if not file_path or not isinstance(file_path, str):
+        raise ValueError(f"file_path {file_path} be a string")
+    if not os.path.exists(file_path) or not os.path.isfile(file_path):
+        raise FileNotFoundError(f"file_path does not exist or is not a file: {file_path}")
+
+    type_guess = mimetypes.guess_type(file_path)
+    return type_guess[0]
+
+
+def media_from_file(file_path: str) -> Union[MediaFile, ImageFile, AudioFile, VideoFile]:
+    """
+    Guesses the type of the file based on the file extension and returns fitting media-file instance.
+    :param file_path: The file path to guess the type of.
+    :return: An instance of a media-file either, image, audio or video.
+    """
+    type_guess = guess_file_type(file_path)
+
+    if type_guess.startswith('image'):
+        return ImageFile().from_file(file_path)
+    if type_guess.startswith('audio'):
+        return AudioFile().from_file(file_path)
+    if type_guess.startswith('video'):
+        return VideoFile().from_file(file_path)
+
+    return MediaFile().from_file(file_path)
 
 
 def convert_to_upload_file_type(file, target_media_file=None):
