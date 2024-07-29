@@ -42,7 +42,10 @@ class MediaFile:
             if self._is_valid_file_path(data):
                 self.from_file(data)
             else:
-                self.from_base64(data)
+                try:
+                    self.from_base64(data)
+                except Exception as e:
+                    print(f"Either wrong file path or not base64. Check your inputs: {data}. Error: {e}")
         elif isinstance(data, bytes):
             self.from_bytes(data)
         elif type(data).__name__ == 'ndarray':
