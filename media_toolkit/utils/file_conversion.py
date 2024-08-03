@@ -37,11 +37,11 @@ def media_from_file(file_path: str) -> Union[MediaFile, ImageFile, AudioFile, Vi
     return MediaFile().from_file(file_path)
 
 
-def convert_to_upload_file_type(file, target_media_file=None):
+def media_from_any(file, media_file_type=None):
     """
     Converts a file to a send able format.
     :param file: The file to convert.
-    :param target_media_file: The target type to convert to. If not specified will be converted to MediaFile.
+    :param media_file_type: The target type to convert to. If not specified will be converted to MediaFile.
         Use ImageFile, AudioFile, VideoFile to convert to those types.
     :return: The send able file.
     """
@@ -51,8 +51,8 @@ def convert_to_upload_file_type(file, target_media_file=None):
 
     # determine target class
     target_class = MediaFile
-    if target_media_file is not None and issubclass(target_media_file, MediaFile):
-        target_class = target_media_file
+    if media_file_type is not None and issubclass(media_file_type, MediaFile):
+        target_class = media_file_type
     media_file_instance = target_class()
 
     # load data
@@ -60,7 +60,7 @@ def convert_to_upload_file_type(file, target_media_file=None):
     return media_file_instance
 
 
-def from_file_result(file_result: dict):
+def media_from_file_result(file_result: dict):
     """
     Converts a file result to a MediaFile.
     :param file_result: The file result to convert.

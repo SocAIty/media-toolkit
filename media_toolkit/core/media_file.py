@@ -197,7 +197,7 @@ class MediaFile:
         return self._content_buffer
 
     def to_base64(self):
-        return base64.b64encode(self.to_bytes()).decode()
+        return base64.b64encode(self.to_bytes()).decode('ascii')
 
     def to_httpx_send_able_tuple(self):
         return self.file_name, self.read(), self.content_type
