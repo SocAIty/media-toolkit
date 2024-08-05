@@ -1,9 +1,14 @@
 import base64
 import io
 import mimetypes
+
 from typing import Union, BinaryIO
 import os
+from urllib.parse import urlparse
+
 from media_toolkit.utils.dependency_requirements import requires_numpy
+
+import re
 
 
 try:
@@ -41,6 +46,8 @@ class MediaFile:
         elif isinstance(data, str):
             if self._is_valid_file_path(data):
                 self.from_file(data)
+            elif self._is_url(data):
+                self.from_url(data)
             else:
                 try:
                     self.from_base64(data)
@@ -92,7 +99,6 @@ class MediaFile:
     #@overload
     #def from_file(path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
     #    return MediaFile().from_file(path_or_handle)
-
     def from_file(self, path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
         """
         Load a file from a file path, file handle or base64 and convert it to BytesIO.
@@ -162,6 +168,54 @@ class MediaFile:
         # ToDo: the from_base64 might overwrite name and content type (ImageFile). Check if this always is intended.
         self.from_base64(file_result_json["content"])
         return self
+
+    def from_url(self, url: str):
+        """
+        Download a file from an url.
+        """
+        # code inspired by: https://github.com/runpod/runpod-python/blob/main/runpod/serverless/utils/rp_download.py
+        import requests
+        HEADERS = {"User-Agent": "runpod-python/0.0.0 (https://runpod.io; support@runpod.io)"}
+        with requests.get(url, headers=HEADERS, stream=True, timeout=5) as response:
+            response.raise_for_status()
+
+            # get orig file name or create new
+            original_file_name = []
+            if "Content-Disposition" in response.headers.keys():
+                original_file_name = re.findall(
+                    "filename=(.+)",
+                    response.headers["Content-Disposition"]
+                )
+
+            if len(original_file_name) > 0:
+                original_file_name = original_file_name[0]
+            else:
+                download_path = urlparse(url).path
+                original_file_name = os.path.basename(download_path)
+
+
+
+            # DOWNLOAD FILE IN Chunks
+            file_size = int(response.headers.get('Content-Length', 0))
+            # calculate chunk_size
+            if file_size <= 1024 * 1024:  # 1 MB
+                chunk_size = 1024  # 1 KB
+            elif file_size <= 1024 * 1024 * 1024:  # 1 GB
+                chunk_size = 1024 * 1024  # 1 MB
+            else:
+                chunk_size = 1024 * 1024 * 10  # 10 MB
+
+            # write the content in chunks to the file
+            file = io.BytesIO()
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                if chunk:  # filter out keep-alive chunks
+                    file.write(chunk)
+            file.name = original_file_name
+            self.file_name = original_file_name
+
+            # self.url = url
+
+            return self.from_bytesio_or_handle(file, copy=False)
 
     @requires_numpy()
     def to_np_array(self, shape=None, dtype=np.uint8):
@@ -249,6 +303,7 @@ class MediaFile:
         # from np_array -> tempfile
         # from starlette_upload_file -> from_buffered_reader(spooled_temporary) -> info from the spooled_temporary
         # from base64 -> from-bytes -> tempfile
+        # from url -> from bytesio
         if self.path is not None:
             self.file_name = os.path.basename(self.path)
             self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
@@ -304,3 +359,6 @@ class MediaFile:
         except:
             return False
 
+    @staticmethod
+    def _is_url(url: str):
+        return urlparse(url).scheme in ['http', 'https']

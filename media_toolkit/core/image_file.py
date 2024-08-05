@@ -49,6 +49,7 @@ class ImageFile(MediaFile):
     def _file_info(self):
         super()._file_info()
         np_array = self.to_np_array()
+
         img_type, self._channels = self.detect_image_type_and_channels(np_array)
         if img_type is not None:
             self.content_type = f"image/{img_type}"
