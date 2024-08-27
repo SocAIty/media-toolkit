@@ -17,10 +17,11 @@ Load and convert from and to common data types:
 - bytes,
 - base64
 - json
+- urls
 - etc.
 
 Transmit files between services with a common interface
-- Native FastSDK and FastTaskAPI integration
+- Native [FastSDK](https://github.com/SocAIty/fastSDK) and [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) integration
 - Supports httpx, requests
 
 Work with native python libs like BytesIO.
@@ -34,9 +35,9 @@ You can install the package with PIP, or clone the repository.
 ```bash
 # install from pypi
 pip install media-toolkit
-# install without dependencies: this is useful if you only need the basic functionality
+# install without dependencies: this is useful if you only need the basic functionality (working with files)
 pip install media-toolkit --no-deps
-# if you only want to use certain file types
+# if you want to use certain file types, and convenience functions
 pip install media-toolkit[VideoFile]  # or [AudioFile, VideoFile, ...]
 # install from github for newest release
 pip install git+git://github.com/SocAIty/media-toolkit
@@ -55,7 +56,7 @@ The library automatically detects the data type and loads it correctly.
 ```python
 from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
 
-# could be a path, base64, bytesio, file_handle, numpy array ...
+# could be a path, url, base64, bytesio, file_handle, numpy array ...
 arbitrary_data = "...."
 # Instantiate an image file
 new_file = ImageFile().from_any(arbitrary_data)
@@ -160,6 +161,7 @@ my_files = {
 response = httpx.Client().post(url, files=my_files)
 ```
 
+
 # How it works
 
 If media-file is instantiated with ```from_*``` it converts it to an intermediate representation.
@@ -170,5 +172,5 @@ Currently the intermediate representation is supported in memory with (BytesIO).
 
 # ToDo:
 
-[x] additionally support tempfile backend instead of working bytesio memory mode only.
-[x] decreasing redundancies for _file_info() method
+- [x] additionally support tempfile backend instead of working bytesio memory mode only.
+- [x] decreasing redundancies for _file_info() method

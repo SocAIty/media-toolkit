@@ -10,7 +10,6 @@ from media_toolkit.utils.dependency_requirements import requires_numpy
 
 import re
 
-
 try:
     import numpy as np
 except ImportError:
@@ -22,6 +21,7 @@ class MediaFile:
     Has file conversions that make it easy to work standardized with files across the web and in the sdk.
     Works natively with bytesio, base64 and binary data.
     """
+
     def __init__(self, file_name: str = "file", content_type: str = "application/octet-stream"):
         """
         :param file_name: The name of the file. Note it is overwritten if you use from_file/from_starlette.
@@ -29,7 +29,7 @@ class MediaFile:
         """
         self.content_type = content_type
         self.file_name = file_name  # the name of the file also when specified in bytesio
-        self.path = None    # the path of the file if it was provided. Is also indicator if file was loaded from file.
+        self.path = None  # the path of the file if it was provided. Is also indicator if file was loaded from file.
         self._content_buffer = io.BytesIO()
 
     def from_any(self, data):
@@ -63,9 +63,9 @@ class MediaFile:
         return self
 
     def from_bytesio_or_handle(
-        self,
-        buffer: Union[io.BytesIO, BinaryIO, io.BufferedReader],
-        copy: bool = True
+            self,
+            buffer: Union[io.BytesIO, BinaryIO, io.BufferedReader],
+            copy: bool = True
     ):
         """
         Set the content of the file from a BytesIO or a file handle.
@@ -95,9 +95,9 @@ class MediaFile:
     def from_bytesio(self, buffer: Union[io.BytesIO, BinaryIO], copy: bool = True):
         return self.from_bytesio_or_handle(buffer=buffer, copy=copy)
 
-    #@staticmethod
-    #@overload
-    #def from_file(path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
+    # @staticmethod
+    # @overload
+    # def from_file(path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
     #    return MediaFile().from_file(path_or_handle)
     def from_file(self, path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
         """
@@ -193,8 +193,6 @@ class MediaFile:
                 download_path = urlparse(url).path
                 original_file_name = os.path.basename(download_path)
 
-
-
             # DOWNLOAD FILE IN Chunks
             file_size = int(response.headers.get('Content-Length', 0))
             # calculate chunk_size
@@ -283,7 +281,7 @@ class MediaFile:
             path = os.path.join(path, self.file_name)
 
         # check if has extension
-        #if os.path.splitext(path)[1] == "":
+        # if os.path.splitext(path)[1] == "":
         #    path += ".mp4"
 
         with open(path, 'wb') as file:
@@ -312,6 +310,21 @@ class MediaFile:
 
         if self.content_type is None:
             self.content_type = "application/octet-stream"
+
+    def file_size(self, unit="bytes") -> int:
+        """
+        :param unit:
+        """
+        size_in_ = self._content_buffer.getbuffer().nbytes
+        if unit == "bytes":
+            return size_in_
+        elif unit == "kb":
+            size_in_ = size_in_ / 1000
+        elif unit == "mb":
+            size_in_ = size_in_ / 1000000
+        elif unit == "gb":
+            size_in_ = size_in_ / 1000000000
+        return size_in_
 
     def __bytes__(self):
         return self.to_bytes()
