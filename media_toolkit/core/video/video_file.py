@@ -215,20 +215,20 @@ class VideoFile(MediaFile):
         # get video info
         info = mediainfo(path)
 
-        def info_to_number(key: str, default_val=None):
+        def info_to_number(key: str, default_val=None, cast=float):
             if key in info:
                 val = info[key]
                 if val == 'N/A':
                     return default_val
                 # split if / in val and take first
                 val = val.split("/")[0]
-                return float(val)
+                return cast(val)
             return default_val
 
-        self.frame_count = info_to_number('nb_frames')
+        self.frame_count = info_to_number('nb_frames', cast=int)
         self.duration = info_to_number('duration')
-        self.width = info_to_number('width')
-        self.height = info_to_number('height')
+        self.width = info_to_number('width', cast=int)
+        self.height = info_to_number('height', cast=int)
         self.shape = (self.width, self.height)
         self.audio_sample_rate = info_to_number('sample_rate', 44100)
 
@@ -366,4 +366,4 @@ class VideoFile(MediaFile):
         return self.to_video_stream()
 
     def __len__(self):
-        return self.frame_count
+        return int(self.frame_count)
