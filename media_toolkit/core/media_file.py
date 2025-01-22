@@ -309,7 +309,7 @@ class MediaFile:
         if self.path is not None:
             self.file_name = os.path.basename(self.path)
             self.content_type = mimetypes.guess_type(self.file_name)[0] or "application/octet-stream"
-        elif hasattr(self._content_buffer, "name"):
+        elif hasattr(self._content_buffer, "name") and self._content_buffer.name is not None:
             self.file_name = os.path.basename(self._content_buffer.name)
 
         if self.content_type is None:
