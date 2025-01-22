@@ -2,10 +2,11 @@ import base64
 import io
 import mimetypes
 
-from typing import Union, BinaryIO
+from typing import Union, BinaryIO, Tuple, Optional
 import os
 from urllib.parse import urlparse
 
+from media_toolkit.core.file_content_buffer import FileContentBuffer
 from media_toolkit.utils.dependency_requirements import requires_numpy
 
 import re
@@ -22,15 +23,25 @@ class MediaFile:
     Works natively with bytesio, base64 and binary data.
     """
 
-    def __init__(self, file_name: str = "file", content_type: str = "application/octet-stream"):
+    def __init__(
+            self,
+            file_name: str = "file",
+            content_type: str = "application/octet-stream",
+            use_temp_file: bool = False,
+            temp_dir: str = None
+    ):
         """
         :param file_name: The name of the file. Note it is overwritten if you use from_file/from_starlette.
         :param content_type: The content type of the file. Note it is overwritten if you use from_file/from_starlette.
+        :param use_temp_file: If True, the file is saved to a temporary file. This is useful for large files.
+        :param max_file_size: The maximum file size in bytes. If the file is larger lib will throw an error.
+        :param temp_dir: The directory where the temporary file is saved. If None, the system temp dir is used.
         """
         self.content_type = content_type
         self.file_name = file_name  # the name of the file also when specified in bytesio
         self.path = None  # the path of the file if it was provided. Is also indicator if file was loaded from file.
-        self._content_buffer = io.BytesIO()
+
+        self._content_buffer = FileContentBuffer(use_temp_file=use_temp_file, temp_dir=temp_dir)
 
     def from_any(self, data):
         """
@@ -71,7 +82,7 @@ class MediaFile:
         Set the content of the file from a BytesIO or a file handle.
         :params buffer: The buffer to read from.
         :params copy: If true, the buffer is completely read to bytes and the bytes copied to this file.
-            If false file works with the provided buffer. Danger -- The buffer is kept open.
+            If false file works with the provided buffer. Danger -- The buffer is kept open (not thread safe).
         """
         if not type(buffer) in [io.BytesIO, io.BufferedReader]:
             raise ValueError(f"Buffer must be of type BytesIO or BufferedReader. Got {type(buffer)}")
@@ -141,10 +152,9 @@ class MediaFile:
         """
         Load a file which was encoded as a base64 string.
         """
-
-        decoded = self._decode_base_64_if_is(base64_str)
+        decoded, media_type = self._decode_base_64_if_is(base64_str)
         if decoded is not None:
-            return self.from_bytes(base64.b64decode(base64_str))
+            return self.from_bytes(decoded)
         else:
             err_str = base64_str if len(base64_str) <= 50 else base64_str[:50] + "..."
             raise ValueError(f"Decoding from base64 like string {err_str} was not possible. Check your data.")
@@ -169,14 +179,15 @@ class MediaFile:
         self.from_base64(file_result_json["content"])
         return self
 
-    def from_url(self, url: str):
+    def from_url(self, url: str, headers: dict = None):
         """
         Download a file from an url.
         """
         # code inspired by: https://github.com/runpod/runpod-python/blob/main/runpod/serverless/utils/rp_download.py
         import requests
-        HEADERS = {"User-Agent": "runpod-python/0.0.0 (https://runpod.io; support@runpod.io)"}
-        with requests.get(url, headers=HEADERS, stream=True, timeout=5) as response:
+
+        headers = headers or {"User-Agent": "runpod-python/0.0.0 (https://runpod.io; support@runpod.io)"}
+        with requests.get(url, headers=headers, stream=True, timeout=5) as response:
             response.raise_for_status()
 
             # get orig file name or create new
@@ -210,9 +221,6 @@ class MediaFile:
                     file.write(chunk)
             file.name = original_file_name
             self.file_name = original_file_name
-
-            # self.url = url
-
             return self.from_bytesio_or_handle(file, copy=False)
 
     @requires_numpy()
@@ -280,10 +288,6 @@ class MediaFile:
                 print(f"No file name given. Using {self.file_name}")
             path = os.path.join(path, self.file_name)
 
-        # check if has extension
-        # if os.path.splitext(path)[1] == "":
-        #    path += ".mp4"
-
         with open(path, 'wb') as file:
             file.write(self.read())
 
@@ -313,7 +317,7 @@ class MediaFile:
 
     def file_size(self, unit="bytes") -> int:
         """
-        :param unit:
+        :param unit: bytes, kb, mb or gb
         """
         size_in_ = self._content_buffer.getbuffer().nbytes
         if unit == "bytes":
@@ -325,6 +329,26 @@ class MediaFile:
         elif unit == "gb":
             size_in_ = size_in_ / 1000000000
         return size_in_
+
+    @property
+    def extension(self) -> Union[str, None]:
+        """
+        Will try to guess the file type based on the detected mimetype.
+        If no mimetype is detected it will try to guess the file extension based on the file name.
+        :return: the guessed file extension without '.'.
+        """
+        if self.file_name is None and self.content_type == "application/octet-stream":
+            return None
+
+        if self.content_type and self.content_type != "application/octet-stream":
+            guessed_ext = mimetypes.guess_extension(self.content_type)
+            if guessed_ext:
+                return guessed_ext.replace(".", "").lower()
+
+        if self.file_name is not None:
+            return None
+
+        return self.file_name.rsplit(".", 1)[-1]
 
     def __bytes__(self):
         return self.to_bytes()
@@ -344,13 +368,42 @@ class MediaFile:
         }
 
     @staticmethod
-    def _decode_base_64_if_is(data: Union[bytes, str]):
+    def _parse_base64_uri(data: str) -> Tuple[str, Optional[str]]:
         """
-        Checks if a string is base64. If it is, it returns the base64 string as bytes; else returns None.
+        Parse base64 string, handling data URI format and extracting content.
+        Args:
+            data (str): Base64 encoded string, potentially with data URI prefix
+        Returns:
+            Tuple of (base64 content, optional media_type)
         """
+        # Regex to match data URI format: data:[<media type>][;base64],<data>
+        data_uri_pattern = r'^data:(?P<mediatype>[\w/\-\.]+)?(?:;base64)?,(?P<base64>.*)'
+
+        # Check if the string matches data URI format
+        match = re.match(data_uri_pattern, data)
+        if match:
+            # Extract media type and base64 content
+            media_type = match.group('mediatype')
+            base64_content = match.group('base64')
+            return base64_content, media_type
+
+        # If no data URI prefix, return the original string
+        return data, None
+
+    @staticmethod
+    def _decode_base_64_if_is(data: Union[bytes, str]) -> [Union[str, None], Union[str, None]]:
+        """
+        Checks if a string is base64 (or base64uri).
+        :param data: The data to decode.
+        :return: If is base64 (decoded base64 data as bytes, optional media_type) else None, None
+        """
+        media_type = None
         if isinstance(data, str):
+            # check if is uri format and parse it
+            data, media_type = MediaFile._parse_base64_uri(data)
             data = data.encode()
 
+        # Decode and Re-encode the data to check if it is valid base64
         try:
             # Decode the data
             decoded = base64.b64decode(data, validate=True)
@@ -358,11 +411,11 @@ class MediaFile:
             back_encoded = base64.b64encode(decoded)
             # Compare with the original encoded data
             if back_encoded == data:
-                return decoded
+                return decoded, media_type
         except Exception:
             pass
 
-        return None
+        return None, None
 
     @staticmethod
     def _is_valid_file_path(path: str):
@@ -374,4 +427,7 @@ class MediaFile:
 
     @staticmethod
     def _is_url(url: str):
+        if not isinstance(url, str):
+            return False
+
         return urlparse(url).scheme in ['http', 'https']

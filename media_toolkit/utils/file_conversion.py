@@ -37,12 +37,15 @@ def media_from_file(file_path: str) -> Union[MediaFile, ImageFile, AudioFile, Vi
     return MediaFile().from_file(file_path)
 
 
-def media_from_any(file, media_file_type=None):
+def media_from_any(file, media_file_type=None, use_temp_file: bool = False, temp_dir: str = None) -> MediaFile:
     """
     Converts a file to a send able format.
     :param file: The file to convert.
     :param media_file_type: The target type to convert to. If not specified will be converted to MediaFile.
         Use ImageFile, AudioFile, VideoFile to convert to those types.
+    :param use_temp_file: If True, a temporary file will be used to store the data within the media-file.
+        If not stored in RAM.
+    :param temp_dir: The directory to store the temporary file in. If not specified, the default temp directory will be used.
     :return: The send able file.
     """
     # it is already converted
@@ -53,7 +56,7 @@ def media_from_any(file, media_file_type=None):
     target_class = MediaFile
     if media_file_type is not None and issubclass(media_file_type, MediaFile):
         target_class = media_file_type
-    media_file_instance = target_class()
+    media_file_instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
 
     # load data
     media_file_instance = media_file_instance.from_any(file)

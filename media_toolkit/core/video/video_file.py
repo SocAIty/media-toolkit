@@ -43,6 +43,7 @@ class VideoFile(MediaFile):
         self.shape = None
         self.duration = None
         self.audio_sample_rate = None
+        self._temp_file_path = None  # if to_temp_file is called, the path is stored here. Needed clean deletion
 
     def from_files(self, image_files: Union[List[str], list], frame_rate: int = 30, audio_file=None):
         """
@@ -142,6 +143,11 @@ class VideoFile(MediaFile):
         if suffix == 'octet-stream':
             raise ValueError("The content type of the video file is not valid. Read a video file first.")
 
+        # If already using temp file storage, return path
+        if self._content_buffer._use_temp_file:
+            return self._content_buffer.name
+
+        # create new temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{suffix}") as temp_video_file:
             temp_video_file.write(self.read())
             temp_video_file_path = temp_video_file.name
@@ -367,3 +373,11 @@ class VideoFile(MediaFile):
 
     def __len__(self):
         return int(self.frame_count)
+
+    def __del__(self):
+        if self._temp_file_path is not None:
+            try:
+                os.remove(self._temp_file_path)
+            except Exception as e:
+                print("Could not delete temporary file. Error: ", e)
+
