@@ -104,6 +104,23 @@ class FileContentBuffer:
         else:
             return self._memory_buffer.getbuffer()
 
+    def to_bytes_io(self) -> io.BytesIO:
+        """Convert the buffer to a BytesIO object.
+        Returns:
+            io.BytesIO: A BytesIO object containing the buffer's content.
+        """
+        if not self._use_temp_file and isinstance(self._memory_buffer, io.BytesIO):
+            # If already a BytesIO, reset position and return
+            self._memory_buffer.seek(0)
+            return self._memory_buffer
+
+        # Create new BytesIO and write content
+        content = self.read()
+        bytes_io = io.BytesIO()
+        bytes_io.write(content)
+        bytes_io.seek(0)
+        return bytes_io
+
     def __del__(self):
         """Cleanup temporary files on deletion."""
         if self._temp_file:

@@ -253,8 +253,11 @@ class MediaFile:
         return res
 
     def to_bytes_io(self) -> io.BytesIO:
-        self._content_buffer.seek(0)
-        return self._content_buffer
+        """
+        Returns the file as a BytesIO object.
+        :return: BytesIO object
+        """
+        return self._content_buffer.to_bytes_io()
 
     def to_base64(self):
         return base64.b64encode(self.to_bytes()).decode('ascii')
