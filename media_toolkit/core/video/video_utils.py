@@ -147,7 +147,11 @@ def video_from_image_generator(
             print(f"Error reading {file_name}: {e}. Skipping frame {i}")
             continue
     # Safely close the writer
-    writer.close()
+    try:
+        writer.close()
+    except Exception as e:
+        print(f"Error closing the video writer. {e}")
+
     return save_path
 
 

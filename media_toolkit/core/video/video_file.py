@@ -33,8 +33,8 @@ class VideoFile(MediaFile):
     A class to represent a video file.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.content_type = "video"
         self.frame_count = None
         self.frame_rate = None
@@ -129,19 +129,16 @@ class VideoFile(MediaFile):
         os.remove(combined)
         return self
 
-    def read(self):
-        self._content_buffer.seek(0)
-        return self._content_buffer.getvalue()
-
     def _to_temp_file(self):
         # get suffix
         if self.content_type is None:
             raise ValueError("The content type of the video file is not set.")
-        if "/" not in self.content_type:
-            raise ValueError("The content type of the video file is not valid. Read a video file first.")
-        suffix = self.content_type.split("/")[1]
-        if suffix == 'octet-stream':
-            raise ValueError("The content type of the video file is not valid. Read a video file first.")
+        if "/" in self.content_type:
+            suffix = self.content_type.split("/")[1]
+            if suffix == 'octet-stream':
+                raise ValueError("The content type of the video file is not valid. Read a video file first.")
+        else:
+            suffix = "mp4"
 
         # If already using temp file storage, return path
         if self._content_buffer._use_temp_file:
@@ -152,6 +149,7 @@ class VideoFile(MediaFile):
             temp_video_file.write(self.read())
             temp_video_file_path = temp_video_file.name
 
+        self._temp_file_path = temp_video_file_path
         return temp_video_file_path
 
     @requires('vidgear', 'numpy', 'pydub')
@@ -202,71 +200,145 @@ class VideoFile(MediaFile):
 
         # if no audio_file was added
         self.from_file(temp_video_file_path)
-        os.remove(temp_video_file_path)
+        try:
+            os.remove(temp_video_file_path)
+        except Exception as e:
+            print(f"couldn't remove temp file {temp_video_file_path} after video was created from stream.")
+
         return self
 
     @requires('cv2', 'pydub')
     def _file_info(self):
-        super()._file_info()  # sets: file_name, content_type.
+        """
+        Gets video file information using mediainfo without necessarily writing to a temporary file.
+        Sets: file_name, content_type, frame_count, duration, width, height, shape, audio_sample_rate, frame_rate
+        """
+        super()._file_info()  # sets: file_name, content_type
 
-        # care for the case that it was loaded from_bytes what usually does not provide any filename / info.
-        # In this case we need to write the data first to file and then retrieve the info again.
-        path = self.path
-        is_temp_file = False
-        if path is None or not os.path.exists(path):
-            self._content_buffer.seek(0)
-            path = self._to_temp_file()
-            is_temp_file = True
-
-        # get video info
-        info = mediainfo(path)
-
-        def info_to_number(key: str, default_val=None, cast=float):
-            if key in info:
-                val = info[key]
+        # Helper function to parse mediainfo values
+        def info_to_number(info_dict: dict, key: str, default_val=None, cast=float):
+            if key in info_dict:
+                val = info_dict[key]
                 if val == 'N/A':
                     return default_val
-                # split if / in val and take first
-                val = val.split("/")[0]
+                val = val.split("/")[0]  # split if / in val and take first
                 return cast(val)
             return default_val
 
-        self.frame_count = info_to_number('nb_frames', cast=int)
-        self.duration = info_to_number('duration')
-        self.width = info_to_number('width', cast=int)
-        self.height = info_to_number('height', cast=int)
-        self.shape = (self.width, self.height)
-        self.audio_sample_rate = info_to_number('sample_rate', 44100)
+        path = self.path
+        # Try to get info directly if path exists
+        saved_to_temporary_file = False
+        if not self.path or not os.path.exists(self.path):
+            path = self._to_temp_file()
+            saved_to_temporary_file = True
 
-        self.frame_rate = info_to_number('avg_frame_rate', None)
-        # need to determine the frame rate with cv2 because pydub calculation gives some weird results..
+        info = mediainfo(path)
+
+        # Extract basic video information
+        self.frame_count = info_to_number(info, 'nb_frames', cast=int)
+        self.duration = info_to_number(info, 'duration')
+        self.width = info_to_number(info, 'width', cast=int)
+        self.height = info_to_number(info, 'height', cast=int)
+        self.shape = (self.width, self.height) if self.width and self.height else None
+        self.audio_sample_rate = info_to_number(info, 'sample_rate', 44100)
+        self.frame_rate = info_to_number(info, 'avg_frame_rate')
+
+        # Use cv2 as fallback for frame rate and count if needed
         if self.frame_rate is None or self.frame_count is None or self.frame_count == 1:
-            cap = cv2.VideoCapture(path)
-            self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
-            self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            cap.release()
+            try:
+                cap = cv2.VideoCapture(path)
+                if self.frame_rate is None:
+                    self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
+                if self.frame_count is None or self.frame_count == 1:
+                    self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                cap.release()
+            finally:
+                if saved_to_temporary_file:
+                    try:
+                        os.remove(path)
+                    except:
+                        pass
 
-        # if self.width is None or self.height is None:
-        #    # try to get it with cv2
-        #    cap = cv2.VideoCapture(path)
-        #    self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        #    self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        #    self.shape = (self.width, self.height)
-        #    self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
-        #    cap.release()
-        # else:
-        #    if self.frame_count is not None and self.duration is not None:
-        #        self.frame_rate = int(self.frame_count / self.duration)
-
+        # Set content type based on format information
         if 'format_name' in info:
             format_name = info['format_name'].split(",")[0]
             self.content_type = f"video/{format_name}"
         else:
-            self.content_type = "video/mp4"  # overwrite default "application/octet-stream"
+            # Try to determine format from file extension if available
+            if self.file_name:
+                ext = os.path.splitext(self.file_name)[1].lower()
+                if ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm']:
+                    self.content_type = f"video/{ext[1:]}"
+            else:
+                self.content_type = "video/mp4"  # default fallback
 
-        # if is tempfile remove it
-        if is_temp_file:
-            os.remove(path)
+    #@requires('cv2', 'pydub')
+    #def _file_info(self):
+    #    super()._file_info()  # sets: file_name, content_type.
+#
+    #    # care for the case that it was loaded from_bytes what usually does not provide any filename / info.
+    #    # In this case we need to write the data first to file and then retrieve the info again.
+    #    path = self.path
+    #    is_temp_file = False
+    #    if path is None or not os.path.exists(path):
+    #        self._content_buffer.seek(0)
+    #        path = self._to_temp_file()
+    #        is_temp_file = True
+#
+    #    # get video info
+    #    info = mediainfo(path)
+#
+    #    def info_to_number(key: str, default_val=None, cast=float):
+    #        if key in info:
+    #            val = info[key]
+    #            if val == 'N/A':
+    #                return default_val
+    #            # split if / in val and take first
+    #            val = val.split("/")[0]
+    #            return cast(val)
+    #        return default_val
+#
+    #    self.frame_count = info_to_number('nb_frames', cast=int)
+    #    self.duration = info_to_number('duration')
+    #    self.width = info_to_number('width', cast=int)
+    #    self.height = info_to_number('height', cast=int)
+    #    self.shape = (self.width, self.height)
+    #    self.audio_sample_rate = info_to_number('sample_rate', 44100)
+#
+    #    self.frame_rate = info_to_number('avg_frame_rate', None)
+    #    # need to determine the frame rate with cv2 because pydub calculation gives some weird results..
+    #    if self.frame_rate is None or self.frame_count is None or self.frame_count == 1:
+    #        cap = cv2.VideoCapture(path)
+    #        self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
+    #        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    #        cap.release()
+#
+    #    # if self.width is None or self.height is None:
+    #    #    # try to get it with cv2
+    #    #    cap = cv2.VideoCapture(path)
+    #    #    self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    #    #    self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    #    #    self.shape = (self.width, self.height)
+    #    #    self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
+    #    #    cap.release()
+    #    # else:
+    #    #    if self.frame_count is not None and self.duration is not None:
+    #    #        self.frame_rate = int(self.frame_count / self.duration)
+#
+    #    if 'format_name' in info:
+    #        format_name = info['format_name'].split(",")[0]
+    #        self.content_type = f"video/{format_name}"
+    #    else:
+    #        self.content_type = "video/mp4"  # overwrite default "application/octet-stream"
+#
+    #    # if is tempfile remove it
+    #    if is_temp_file:
+    #        try:
+    #            os.remove(path)
+    #        except Exception as e:
+    #            # If the file came from an buffered file, then the temp_file was not copied but kept in the buffer.
+    #            # The file is then already in use and thus can't be deleted.
+    #            pass
 
     @requires('vidgear')
     def to_image_stream(self):

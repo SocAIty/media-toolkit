@@ -44,6 +44,20 @@ class FileContentBuffer:
             self._memory_buffer = io.BytesIO()
             self._temp_file = None
 
+    def overwrite_buffer(self, buf: io.BytesIO):
+        """
+        Set the buffer to use an existing BytesIO object.
+        This will cause:
+            - that use tempfile is set to False. And existing tempfile is closed and deleted.
+            - the class works entirely in memory.
+        This is useful, if you want to use the buffer with an existing BytesIO object to speed up the process.
+        Args:
+            buf (io.BytesIO): BytesIO object to use as buffer.
+        """
+        self._use_temp_file = False
+        self._remove_temp_file()
+        self._memory_buffer = buf
+
     def write(self, data: bytes):
         """Write data to the buffer.
 
@@ -121,11 +135,15 @@ class FileContentBuffer:
         bytes_io.seek(0)
         return bytes_io
 
-    def __del__(self):
-        """Cleanup temporary files on deletion."""
+    def _remove_temp_file(self):
         if self._temp_file:
             try:
                 self._temp_file.close()
                 os.remove(self._temp_file.name)
+                self._temp_file = None
             except:
                 pass
+
+    def __del__(self):
+        """Cleanup temporary files on deletion."""
+        self._remove_temp_file()

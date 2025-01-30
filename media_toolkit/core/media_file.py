@@ -95,7 +95,7 @@ class MediaFile:
             self.path = buffer.name
 
         if not copy:
-            self._content_buffer = buffer
+            self._content_buffer.overwrite_buffer(buffer)
             self._file_info()
         else:
             self.from_bytes(buffer.read())  # calls self._file_info also
