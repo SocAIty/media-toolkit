@@ -153,6 +153,9 @@ class MediaFile:
         Load a file which was encoded as a base64 string.
         """
         decoded, media_type = self._decode_base_64_if_is(base64_str)
+        if media_type is not None:
+            self.content_type = media_type
+
         if decoded is not None:
             return self.from_bytes(decoded)
         else:
