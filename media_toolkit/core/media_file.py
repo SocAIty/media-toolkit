@@ -179,8 +179,8 @@ class MediaFile:
         self.file_name = file_result_json["file_name"]
         self.content_type = file_result_json["content_type"]
         # ToDo: the from_base64 might overwrite name and content type (ImageFile). Check if this always is intended.
-        self.from_base64(file_result_json["content"])
-        return self
+        return self.from_any(file_result_json["content"])
+
 
     def from_url(self, url: str, headers: dict = None):
         """
@@ -437,3 +437,8 @@ class MediaFile:
             return False
 
         return urlparse(url).scheme in ['http', 'https']
+
+    def __sizeof__(self):
+        """Returns the memory size of the instance + actual file/buffer size."""
+        size = super().__sizeof__() + self.file_size("bytes")
+        return size

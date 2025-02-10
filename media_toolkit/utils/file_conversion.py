@@ -63,15 +63,25 @@ def media_from_any(file, media_file_type=None, use_temp_file: bool = False, temp
     return media_file_instance
 
 
-def media_from_file_result(file_result: dict, allow_reads_from_disk: bool = False) -> MediaFile:
+def media_from_file_result(
+        file_result: dict,
+        allow_reads_from_disk: bool = False,
+        default_return_if_not_file_result = None
+) -> MediaFile:
     """
     Converts a file result to a MediaFile. FileResult contains "content_type", "content" and "file_name".
     This type stems usually from a FastTaskAPI JobResult.
     :param file_result: The file result to convert.
     :param allow_reads_from_disk: If True, the file will be read from disk if the content is a file path.
         This is in most cases not recommended, because it can be a security risk.
+    :param default_return_if_not_file_result: The default return value if the file_result is not a valid file result.
     :return: The MediaFile.
     """
+    if not isinstance(file_result, dict) or not "file_name" in file_result or not "content" in file_result:
+        if default_return_if_not_file_result is not None:
+            return default_return_if_not_file_result
+        raise ValueError("file_result must be a dictionary containing 'file_name' and 'content'.")
+
     content_type = file_result.get("content_type", None)
     target_class = MediaFile
     if content_type is not None and isinstance(content_type, str):
