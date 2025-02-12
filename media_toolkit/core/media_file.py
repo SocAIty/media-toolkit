@@ -47,6 +47,9 @@ class MediaFile:
         """
         Load a file from any supported data type. The file is loaded into the memory as bytes.
         """
+        if not data:
+            return None
+
         # it is already converted
         if isinstance(data, MediaFile):
             return data
@@ -68,7 +71,7 @@ class MediaFile:
             self.from_bytes(data)
         elif type(data).__name__ == 'ndarray':
             self.from_np_array(data)
-        elif data.__module__ == 'starlette.datastructures' and type(data).__name__ == 'UploadFile':
+        elif hasattr(data, '__module__') and data.__module__ == 'starlette.datastructures' and type(data).__name__ == 'UploadFile':
             self.from_starlette_upload_file(data)
 
         return self
