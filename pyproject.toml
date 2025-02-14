@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "media-toolkit"
-version = "00.02.00"
+version = "00.02.01"
 description = "Web-ready standardized file processing and serialization. Read, load and convert to standard file types with a common interface."
 requires-python = ">=3.8"
 authors = [
@@ -14,7 +14,8 @@ license = { text = "GPLv3" }
 readme = "README.md"
 dependencies = [
     "numpy>=1.18.0",
-    "tqdm"
+    "tqdm",
+    "httpx"
 ]
 
 [project.urls]

@@ -47,7 +47,7 @@ class MediaFile:
         """
         Load a file from any supported data type. The file is loaded into the memory as bytes.
         """
-        if not data:
+        if data is None:
             return None
 
         # it is already converted
