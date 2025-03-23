@@ -8,8 +8,10 @@ from urllib.parse import urlparse
 
 from media_toolkit.core.file_content_buffer import FileContentBuffer
 from media_toolkit.utils.dependency_requirements import requires_numpy
+from media_toolkit.utils import download_file
 
 import re
+
 
 try:
     import numpy as np
@@ -184,50 +186,13 @@ class MediaFile:
         # ToDo: the from_base64 might overwrite name and content type (ImageFile). Check if this always is intended.
         return self.from_any(file_result_json["content"])
 
-
-    def from_url(self, url: str, headers: dict = None):
+    def from_url(self, url: str):
         """
         Download a file from an url.
         """
-        # code inspired by: https://github.com/runpod/runpod-python/blob/main/runpod/serverless/utils/rp_download.py
-        import requests
-
-        headers = headers or {"User-Agent": "runpod-python/0.0.0 (https://runpod.io; support@runpod.io)"}
-        with requests.get(url, headers=headers, stream=True, timeout=5) as response:
-            response.raise_for_status()
-
-            # get orig file name or create new
-            original_file_name = []
-            if "Content-Disposition" in response.headers.keys():
-                original_file_name = re.findall(
-                    "filename=(.+)",
-                    response.headers["Content-Disposition"]
-                )
-
-            if len(original_file_name) > 0:
-                original_file_name = original_file_name[0]
-            else:
-                download_path = urlparse(url).path
-                original_file_name = os.path.basename(download_path)
-
-            # DOWNLOAD FILE IN Chunks
-            file_size = int(response.headers.get('Content-Length', 0))
-            # calculate chunk_size
-            if file_size <= 1024 * 1024:  # 1 MB
-                chunk_size = 1024  # 1 KB
-            elif file_size <= 1024 * 1024 * 1024:  # 1 GB
-                chunk_size = 1024 * 1024  # 1 MB
-            else:
-                chunk_size = 1024 * 1024 * 10  # 10 MB
-
-            # write the content in chunks to the file
-            file = io.BytesIO()
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                if chunk:  # filter out keep-alive chunks
-                    file.write(chunk)
-            file.name = original_file_name
-            self.file_name = original_file_name
-            return self.from_bytesio_or_handle(file, copy=False)
+        file, original_file_name = download_file(url)
+        self.file_name = original_file_name
+        return self.from_bytesio_or_handle(file, copy=False)
 
     @requires_numpy()
     def to_np_array(self, shape=None, dtype=np.uint8):
