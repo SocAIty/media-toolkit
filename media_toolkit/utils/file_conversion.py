@@ -1,3 +1,4 @@
+import inspect
 import os.path
 from typing import Union
 import mimetypes
@@ -36,8 +37,13 @@ def media_from_file(file_path: str) -> Union[MediaFile, ImageFile, AudioFile, Vi
 
     return MediaFile().from_file(file_path)
 
-
-def media_from_any(file, media_file_type=None, use_temp_file: bool = False, temp_dir: str = None) -> MediaFile:
+def media_from_any(
+        file,
+        media_file_type=None,
+        use_temp_file: bool = False,
+        temp_dir: str = None,
+        allow_reads_from_disk: bool = False
+) -> MediaFile:
     """
     Converts a file to a send able format.
     :param file: The file to convert.
@@ -46,6 +52,7 @@ def media_from_any(file, media_file_type=None, use_temp_file: bool = False, temp
     :param use_temp_file: If True, a temporary file will be used to store the data within the media-file.
         If not stored in RAM.
     :param temp_dir: The directory to store the temporary file in. If not specified, the default temp directory will be used.
+    :param allow_reads_from_disk: If readings from disk are allowed. Deactivate in web environments.
     :return: The send able file.
     """
     # it is already converted
@@ -54,22 +61,22 @@ def media_from_any(file, media_file_type=None, use_temp_file: bool = False, temp
 
     # determine target class
     target_class = MediaFile
-    if media_file_type is not None and issubclass(media_file_type, MediaFile):
+    if media_file_type is not None and inspect.isclass(media_file_type) and issubclass(media_file_type, MediaFile):
         target_class = media_file_type
     media_file_instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
 
     # load data
-    media_file_instance = media_file_instance.from_any(file)
+    media_file_instance = media_file_instance.from_any(file, allow_reads_from_disk=allow_reads_from_disk)
     return media_file_instance
 
 
-def media_from_file_result(
+def media_from_FileModel(
         file_result: dict,
         allow_reads_from_disk: bool = False,
         default_return_if_not_file_result = None
 ) -> MediaFile:
     """
-    Converts a file result to a MediaFile. FileResult contains "content_type", "content" and "file_name".
+    Converts a file result to a MediaFile. FileModel contains "content_type", "content" and "file_name".
     This type stems usually from a FastTaskAPI JobResult.
     :param file_result: The file result to convert.
     :param allow_reads_from_disk: If True, the file will be read from disk if the content is a file path.
@@ -77,7 +84,7 @@ def media_from_file_result(
     :param default_return_if_not_file_result: The default return value if the file_result is not a valid file result.
     :return: The MediaFile.
     """
-    if not isinstance(file_result, dict) or not "file_name" in file_result or not "content" in file_result:
+    if not MediaFile._is_file_model(file_result):
         if default_return_if_not_file_result is not None:
             return default_return_if_not_file_result
         raise ValueError("file_result must be a dictionary containing 'file_name' and 'content'.")

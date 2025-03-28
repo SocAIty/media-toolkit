@@ -6,6 +6,7 @@ from typing import Union, BinaryIO, Tuple, Optional
 import os
 from urllib.parse import urlparse
 
+from media_toolkit.core.IMediaFile import IMediaFile
 from media_toolkit.core.file_content_buffer import FileContentBuffer
 from media_toolkit.utils.dependency_requirements import requires_numpy
 from media_toolkit.utils import download_file
@@ -19,12 +20,11 @@ except ImportError:
     pass
 
 
-class MediaFile:
+class MediaFile(IMediaFile):
     """
     Has file conversions that make it easy to work standardized with files across the web and in the sdk.
     Works natively with bytesio, base64 and binary data.
     """
-
     def __init__(
             self,
             file_name: str = "file",
@@ -45,9 +45,13 @@ class MediaFile:
 
         self._content_buffer = FileContentBuffer(use_temp_file=use_temp_file, temp_dir=temp_dir)
 
-    def from_any(self, data):
+    def from_any(self, data, allow_reads_from_disk: bool = True):
         """
         Load a file from any supported data type. The file is loaded into the memory as bytes.
+        :param data: The data to load from. Can be a file path, url, base64 string, bytes, numpy array, file handle...
+        :param allow_reads_from_disk:
+            If True, the method will try to read from disk if the data is a file path. (Risky in web environments)
+            If False, the method will not read from disk and only load the file path as a string.
         """
         if data is None:
             return None
@@ -179,7 +183,7 @@ class MediaFile:
     def from_dict(self, file_result_json: dict):
         """
         Load a file from a dictionary.
-        :param d: The dictionary to load from formatted as FileResult.to_json().
+        :param d: The dictionary to load from formatted as FileModel.to_json().
         """
         self.file_name = file_result_json["file_name"]
         self.content_type = file_result_json["content_type"]
@@ -405,6 +409,10 @@ class MediaFile:
             return False
 
         return urlparse(url).scheme in ['http', 'https']
+
+    @staticmethod
+    def _is_file_model(data: dict):
+        return isinstance(data, dict) and "file_name" in data and "content" in data
 
     def __sizeof__(self):
         """Returns the memory size of the instance + actual file/buffer size."""
