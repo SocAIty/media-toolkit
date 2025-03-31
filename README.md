@@ -1,9 +1,9 @@
 
-  <h1 align="center" style="margin-top:-25px">MediaToolkit</h1>
+<h1 align="center" style="margin-top:-25px">MediaToolkit</h1>
 <p align="center">
   <img align="center" src="docs/media-file-icon.png" height="200" />
 </p>
-  <h3 align="center" style="margin-top:-10px">Web-ready standardized file processing and serialization</h3>
+<h3 align="center" style="margin-top:-10px">Web-ready standardized file processing and serialization</h3>
 
 
 # Features
@@ -14,7 +14,7 @@ Especially useful for code that works with multiple file types like images, audi
 Load and convert from and to common data types:
 - numpy arrays 
 - file paths 
-- bytes,
+- bytes
 - base64
 - json
 - urls
@@ -42,6 +42,7 @@ pip install media-toolkit[VideoFile]  # or [AudioFile, VideoFile, ...]
 # install from github for newest release
 pip install git+git://github.com/SocAIty/media-toolkit
 ```
+
 The package checks if you have missing dependencies for certain file types while using. 
 Use the ```--no-deps``` flag for a minimal tiny pure python installation.
 The package with dependencies is quite small < 39kb itself.
@@ -94,7 +95,58 @@ as_base64 = my_file.to_base64()
 as_json = my_file.to_json()
 ```
 
-### Working with VideoFiles.
+## Working with Collections of Files
+
+### MediaList
+A flexible list that can handle multiple media files with type safety:
+
+```python
+from media_toolkit import MediaList, AudioFile
+
+# Create a list that only accepts AudioFiles
+audio_list = MediaList[AudioFile]()
+
+# Add files to the list
+audio_list.append("path/to/audio.mp3")
+audio_list.extend(["url1", "url2"])
+
+# Process all files
+for audio in audio_list:
+    print(audio.file_size())
+
+# Convert all files to base64
+base64_files = audio_list.to_base64()
+```
+
+### MediaDict
+A dictionary for organizing media files with keys:
+
+```python
+from media_toolkit import MediaDict, ImageFile
+
+# Create a dictionary that only accepts ImageFiles
+image_dict = MediaDict[ImageFile]()
+
+# Add files with keys
+image_dict["profile"] = "path/to/profile.jpg"
+image_dict["banner"] = "https://example.com/banner.png"
+
+# Process files
+for key, image in image_dict.items():
+    print(f"{key}: {image.file_size()}")
+
+# Convert to JSON
+json_data = image_dict.to_json()
+```
+
+Both `MediaList` and `MediaDict` support:
+- Type safety with generic types (e.g., `MediaList[AudioFile]`)
+- Lazy loading of files
+- Batch processing
+- Common operations (to_base64, to_bytes, etc.)
+- Nested structures (MediaDict inside MediaList and vice versa)
+
+### Working with VideoFiles
 
 The VideoFiles wrap the famous [vidgear](https://abhitronix.github.io/vidgear/latest/) package as well as [pydub](https://github.com/jiaaro/pydub).
 VideoFiles support extra methods like audio extraction, combining video and audio.
@@ -143,7 +195,7 @@ You can use the files in fastapi and transform the starlette upload file to a Me
 ```python
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    mf = ImageFile().from_starlette_upload_file(file)
+    mf = ImageFile().from_any(file)
     return {"filename": file.filename}
 ```
 
@@ -161,16 +213,12 @@ my_files = {
 response = httpx.Client().post(url, files=my_files)
 ```
 
-
 # How it works
 
 If media-file is instantiated with ```from_*``` it converts it to an intermediate representation.
 The ```to_*``` methods then convert it to the desired format.
 
-Currently the intermediate representation is supported in memory with (BytesIO).
-
+Currently the intermediate representation is supported in memory with (BytesIO) or on disk with temporary files.
 
 # ToDo:
-
-- [x] additionally support tempfile backend instead of working bytesio memory mode only.
 - [x] decreasing redundancies for _file_info() method

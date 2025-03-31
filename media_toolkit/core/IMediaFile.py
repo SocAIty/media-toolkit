@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import io
-from typing import Union, Dict, Any, Optional
+from typing import Dict, Any, Optional
 
 
 class IMediaFile(ABC):

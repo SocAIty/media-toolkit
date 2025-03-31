@@ -1,11 +1,13 @@
 import io
-from typing import List, Union, Optional, Any
+from typing import List, Union, Optional, Any, TypeVar, Generic
 from media_toolkit.core.media_file import MediaFile
 from media_toolkit.core.IMediaFile import IMediaFile
 import os
 
+T = TypeVar('T', bound=IMediaFile)
 
-class MediaList(IMediaFile):
+
+class MediaList(IMediaFile, Generic[T]):
     """
     A flexible media file list that handles multiple file types and sources with configurable loading behaviors.
 
@@ -14,10 +16,11 @@ class MediaList(IMediaFile):
     - Lazy loading configurations
     - Basic list operations
     - Batch media processing
+    - Generic type restrictions (e.g. MediaList[AudioFile])
     """
     def __init__(
         self,
-        files: Optional[List[Union[str, MediaFile]]] = None,
+        files: Optional[List[Union[str, T]]] = None,
         download_files=True,
         read_system_files=True,
         file_name: str = "MediaList",
@@ -41,12 +44,12 @@ class MediaList(IMediaFile):
 
         self.download_files = download_files
         self.read_system_files = read_system_files
-        self.media_files: List[Union[str, MediaFile]] = []
+        self.media_files: List[Union[str, T]] = []
 
         if files:
             self.extend(files)
 
-    def _process_file(self, file: Union[str, MediaFile]) -> Union[str, MediaFile]:
+    def _process_file(self, file: Union[str, T]) -> Union[str, T]:
         """
         Process a single file based on configuration.
         Args:
@@ -56,7 +59,7 @@ class MediaList(IMediaFile):
         Raises:
             ValueError for configuration-blocked file processing
         """
-        if isinstance(file, MediaFile):
+        if isinstance(file, IMediaFile):
             return file
 
         if MediaFile._is_url(file):
@@ -71,10 +74,10 @@ class MediaList(IMediaFile):
 
         return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_any(file)
 
-    def from_any(self, data: List[Union[str, MediaFile]], allow_reads_from_disk: bool = True) -> 'MediaList':
+    def from_any(self, data: List[Union[str, T]], allow_reads_from_disk: bool = True) -> 'MediaList[T]':
         if isinstance(data, list):
             self.extend([self._process_file(d) for d in data])
-        elif isinstance(data, MediaFile):
+        elif isinstance(data, IMediaFile):
             self.media_files.append(self._process_file(data))
         return self
 
@@ -83,7 +86,7 @@ class MediaList(IMediaFile):
         ignore_all_potential_errors: bool = False,
         raise_exception: bool = True,
         silent: bool = False
-    ) -> List[MediaFile]:
+    ) -> List[T]:
         """
         Validate that all files can be processed for batch operations. This depends on configuration.
         :param raise_exception: if set false, function will return only processable files and ignore the rest
@@ -95,14 +98,14 @@ class MediaList(IMediaFile):
 
         processable_files = [
             f for f in self.media_files
-            if isinstance(f, MediaFile)
+            if isinstance(f, IMediaFile)
         ]
 
         if len(processable_files) != len(self.media_files):
             not_processable_file_names = [str(f) for f in self.media_files if f not in processable_files]
             message = f"Files not processed: {not_processable_file_names}. " \
-                        f"Check configuration (download_files={self.download_files}, " \
-                        f"read_system_files={self.read_system_files})"
+                      f"Check configuration (download_files={self.download_files}, " \
+                      f"read_system_files={self.read_system_files})"
             if raise_exception:
                 raise ValueError(message)
             if not silent:
@@ -171,17 +174,17 @@ class MediaList(IMediaFile):
         for file in self.get_processable_files(raise_exception=False):
             file.save(os.path.join(directory, file.file_name))
 
-    def append(self, file: Union[str, MediaFile]):
+    def append(self, file: Union[str, T]):
         """Append a single file to the list."""
         processed_file = self._process_file(file)
         self.media_files.append(processed_file)
 
-    def extend(self, files: List[Union[str, MediaFile]]):
+    def extend(self, files: List[Union[str, T]]):
         """Extend the list with multiple files."""
         for file in files:
             self.append(self._process_file(file))
 
-    def pop(self, index: int = -1) -> Union[str, MediaFile]:
+    def pop(self, index: int = -1) -> Union[str, T]:
         """Remove and return the file at the specified index."""
         return self.media_files.pop(index)
 
@@ -202,6 +205,6 @@ class MediaList(IMediaFile):
         size = super().__sizeof__() + self.file_size("bytes")
         return size
 
-    def to_list(self) -> List[Union[str, MediaFile]]:
+    def to_list(self) -> List[Union[str, T]]:
         """Convert MediaList to a list of files."""
         return self.media_files

@@ -1,12 +1,15 @@
 import io
 import uuid
-from typing import List, Union, Optional, Any, Dict
+from typing import List, Union, Optional, Any, Dict, TypeVar, Generic
 from media_toolkit.core.IMediaFile import IMediaFile
 from media_toolkit.core.media_file import MediaFile
 from media_toolkit.core.MediaList import MediaList
 
 
-class MediaDict(IMediaFile):
+T = TypeVar('T', bound=IMediaFile)
+
+
+class MediaDict(IMediaFile, Generic[T]):
     """
     A flexible media file dictionary that handles multiple file types
     and sources with configurable loading behaviors.
@@ -14,10 +17,11 @@ class MediaDict(IMediaFile):
     Supports:
     - Multiple MediaFile types as dictionary values
     - Batch media processing
+    - Generic type restrictions (e.g. MediaDict[AudioFile])
     """
     def __init__(
             self,
-            files: Optional[Dict[str, Union[str, MediaFile, MediaList, 'MediaDict']]] = None,
+            files: Optional[Dict[str, Union[str, T, MediaList[T], 'MediaDict[T]']]] = None,
             download_files: bool = True,
             read_system_files: bool = True,
             file_name: str = "MediaDict",
@@ -40,15 +44,15 @@ class MediaDict(IMediaFile):
         self.temp_dir = temp_dir
         self.download_files = download_files
         self.read_system_files = read_system_files
-        self._media_files: Dict[str, Union[str, MediaFile, MediaList]] = {}
+        self._media_files: Dict[str, Union[str, T, MediaList[T]]] = {}
 
         if files:
             self.update(files)
 
     def _process_file(
             self,
-            file: Union[str, MediaFile, MediaList, 'MediaDict']
-    ) -> Union[str, MediaFile, MediaList, 'MediaDict', IMediaFile]:
+            file: Union[str, T, MediaList[T], 'MediaDict[T]']
+    ) -> Union[str, T, MediaList[T], 'MediaDict[T]']:
         """
         Process a single file based on configuration.
 
@@ -57,7 +61,7 @@ class MediaDict(IMediaFile):
         Returns:
             Processed file (MediaFile, MediaList, or original str)
         """
-        if isinstance(file, (MediaFile, MediaList, MediaDict)):
+        if isinstance(file, (IMediaFile, MediaList, MediaDict)):
             return file
 
         if isinstance(file, str):
@@ -72,7 +76,7 @@ class MediaDict(IMediaFile):
                 return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_file(file)
 
         if isinstance(file, list):
-            return MediaList(
+            return MediaList[T](
                 files=file,
                 download_files=self.download_files,
                 read_system_files=self.read_system_files,
@@ -81,7 +85,7 @@ class MediaDict(IMediaFile):
             )
 
         if isinstance(file, dict) and not MediaFile._is_file_model(file):
-            return MediaDict(
+            return MediaDict[T](
                 files=file,
                 download_files=self.download_files,
                 read_system_files=self.read_system_files,
@@ -93,8 +97,8 @@ class MediaDict(IMediaFile):
 
     def from_any(
             self,
-            data: Union[Dict[str, Union[str, MediaFile, MediaList]], Any]
-    ) -> 'MediaDict':
+            data: Union[Dict[str, Union[str, T, MediaList[T]]], Any]
+    ) -> 'MediaDict[T]':
         """
         Load files from a dictionary of files.
 
@@ -111,7 +115,7 @@ class MediaDict(IMediaFile):
             ignore_all_potential_errors: bool = False,
             raise_exception: bool = True,
             silent: bool = False
-    ) -> 'MediaDict':
+    ) -> 'MediaDict[T]':
         """
         Validate that all files can be processed for batch operations.
 
@@ -127,7 +131,7 @@ class MediaDict(IMediaFile):
 
         processable_files = {
             key: file for key, file in self._media_files.items()
-            if isinstance(file, (MediaFile, MediaList))
+            if isinstance(file, (IMediaFile, MediaList))
         }
 
         if len(processable_files) != len(self._media_files):
@@ -150,18 +154,19 @@ class MediaDict(IMediaFile):
 
         return self
 
-    def _shallow_copy_with_settings(self, data: dict | None = None) -> 'MediaDict':
+    def _shallow_copy_with_settings(self, data: dict | None = None) -> 'MediaDict[T]':
         """
         Creates a new MediaDict with the same settings but shallow copies the media files dictionary.
         This avoids re-reading all files when creating a copy.
         """
-
-        md = MediaDict(file_name=self.file_name, download_files=self.download_files, 
-                       read_system_files=self.read_system_files, use_temp_file=self.use_temp_file, temp_dir=self.temp_dir)
+        md = MediaDict[T](
+            file_name=self.file_name, download_files=self.download_files,
+            read_system_files=self.read_system_files, use_temp_file=self.use_temp_file, temp_dir=self.temp_dir
+        )
         md._media_files = data
         return md
 
-    def get_url_files(self) -> Union['MediaDict', dict]:
+    def get_url_files(self) -> Union['MediaDict[T]', dict]:
         """
         Get all non-processed files that are URLs.
 
@@ -170,13 +175,13 @@ class MediaDict(IMediaFile):
         """
         if self.download_files:
             return {}
-        
+
         return self._shallow_copy_with_settings({
             key: file for key, file in self._media_files.items()
             if isinstance(file, str) and MediaFile._is_url(file)
         })
 
-    def get_file_path_files(self) -> Union['MediaDict', dict]:
+    def get_file_path_files(self) -> Union['MediaDict[T]', dict]:
         """
         Get all non-processed files that are file paths.
 
@@ -215,7 +220,7 @@ class MediaDict(IMediaFile):
         """Convert files to JSON representation."""
         files = self.get_processable_files(ignore_all_potential_errors=True)
         return {
-            key: (file.to_json() if isinstance(file, (MediaFile, MediaList)) else file)
+            key: (file.to_json() if isinstance(file, (IMediaFile, MediaList)) else file)
             for key, file in files.items()
         }
 
@@ -272,7 +277,7 @@ class MediaDict(IMediaFile):
         """Allow dictionary-style access."""
         return self._media_files[key]
 
-    def __setitem__(self, key: str, value: Union[str, MediaFile, MediaList]):
+    def __setitem__(self, key: str, value: Union[str, T, MediaList[T]]):
         """Allow dictionary-style assignment with processing."""
         self._media_files[key] = self._process_file(value)
 
@@ -304,7 +309,7 @@ class MediaDict(IMediaFile):
         """Return dictionary items."""
         return self._media_files.items()
 
-    def update(self, files: Union['MediaDict', Dict[str, Union[str, MediaFile, MediaList]]]):
+    def update(self, files: Union['MediaDict[T]', Dict[str, Union[str, T, MediaList[T]]]]):
         """
         Update the dictionary with new files.
 
@@ -322,7 +327,7 @@ class MediaDict(IMediaFile):
         size = super().__sizeof__() + self.file_size("bytes")
         return size
 
-    def to_dict(self) -> Dict[str, Union[str, MediaFile, MediaList]]:
+    def to_dict(self) -> Dict[str, Union[str, T, MediaList[T]]]:
         """Convert MediaDict to a standard dictionary."""
         return {
             key: (file.to_dict() if isinstance(file, MediaDict) else file)

@@ -366,7 +366,7 @@ class MediaFile(IMediaFile):
         return data, None
 
     @staticmethod
-    def _decode_base_64_if_is(data: Union[bytes, str]) -> [Union[str, None], Union[str, None]]:
+    def _decode_base_64_if_is(data: Union[bytes, str]) -> Tuple[Union[str, None], Union[str, None]]:
         """
         Checks if a string is base64 (or base64uri).
         :param data: The data to decode.
@@ -397,7 +397,7 @@ class MediaFile(IMediaFile):
         try:
             is_file = os.path.isfile(path)
             return is_file
-        except:
+        except Exception:
             return False
 
     @staticmethod

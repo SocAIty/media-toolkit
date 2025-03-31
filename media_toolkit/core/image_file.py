@@ -1,5 +1,5 @@
 import os.path
-
+from typing import Tuple
 from media_toolkit.utils.dependency_requirements import requires_numpy, requires_cv2, requires
 from media_toolkit.core.media_file import MediaFile
 
@@ -33,7 +33,6 @@ class ImageFile(MediaFile):
             return super().from_bytes(buffer)
         else:
             raise ValueError(f"Could not convert np_array to {img_type} image")
-
 
     @requires('numpy', 'cv2')
     def to_np_array(self):
@@ -75,9 +74,8 @@ class ImageFile(MediaFile):
             if img_type is not None:
                 self.content_type = f"image/{img_type}"
         
-
     @staticmethod
-    def detect_image_type_and_channels(image) -> (str, int):
+    def detect_image_type_and_channels(image) -> Tuple[str, int]:
         """Detect the image type and number of _channels from a numpy array."""
         if isinstance(image, list):
             image = np.array(image)
