@@ -1,6 +1,6 @@
 import inspect
 import os.path
-from typing import Union
+from typing import Union, Any, Optional
 import mimetypes
 from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
 
@@ -37,12 +37,13 @@ def media_from_file(file_path: str) -> Union[MediaFile, ImageFile, AudioFile, Vi
 
     return MediaFile().from_file(file_path)
 
+
 def media_from_any(
         file,
-        media_file_type=None,
-        use_temp_file: bool = False,
-        temp_dir: str = None,
-        allow_reads_from_disk: bool = False
+        media_file_type: Optional[MediaFile] = None,
+        use_temp_file: Optional[bool] = False,
+        temp_dir: Optional[str] = None,
+        allow_reads_from_disk: Optional[bool] = False
 ) -> MediaFile:
     """
     Converts a file to a send able format.
@@ -73,7 +74,7 @@ def media_from_any(
 def media_from_FileModel(
         file_result: dict,
         allow_reads_from_disk: bool = False,
-        default_return_if_not_file_result = None
+        default_return_if_not_file_result: Any = None
 ) -> MediaFile:
     """
     Converts a file result to a MediaFile. FileModel contains "content_type", "content" and "file_name".
@@ -103,7 +104,7 @@ def media_from_FileModel(
         # fancy way to write efficient the factory conversion
         target_class = next(
             filter(lambda ft: ft[0] in content_type, file_types.items()),
-            (None, MediaFile) # return tuple as default because next returns key, value
+            (None, MediaFile)  # return tuple as default because next returns key, value
         )[1]
 
     content = file_result.get('content', file_result)

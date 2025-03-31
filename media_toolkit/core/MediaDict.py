@@ -146,8 +146,9 @@ class MediaDict(IMediaFile):
             if not silent:
                 print(message)
 
-        return self._shallow_copy_with_settings(processable_files)
+            return self._shallow_copy_with_settings(processable_files)
 
+        return self
 
     def _shallow_copy_with_settings(self, data: dict | None = None) -> 'MediaDict':
         """
@@ -157,9 +158,8 @@ class MediaDict(IMediaFile):
 
         md = MediaDict(file_name=self.file_name, download_files=self.download_files, 
                        read_system_files=self.read_system_files, use_temp_file=self.use_temp_file, temp_dir=self.temp_dir)
-        md._media_files = data._media_files
+        md._media_files = data
         return md
-
 
     def get_url_files(self) -> Union['MediaDict', dict]:
         """
@@ -176,7 +176,6 @@ class MediaDict(IMediaFile):
             if isinstance(file, str) and MediaFile._is_url(file)
         })
 
-
     def get_file_path_files(self) -> Union['MediaDict', dict]:
         """
         Get all non-processed files that are file paths.
@@ -190,7 +189,6 @@ class MediaDict(IMediaFile):
             key: file for key, file in self._media_files.items()
             if isinstance(file, str) and MediaFile._is_valid_file_path(file)
         })
-
 
     def to_base64(self) -> Dict[str, str]:
         """Convert all processable files to base64."""
@@ -228,21 +226,33 @@ class MediaDict(IMediaFile):
             for key, file in self.get_processable_files(raise_exception=False).items()
         }
 
-    def to_httpx_send_able_tuple(self) -> List[tuple]:
+    def to_httpx_send_able_tuple(self) -> List[tuple] | dict:
         """
         Convert files to httpx-send-able format.
 
         Args:
             param_name: Optional parameter name for API endpoint
         Returns:
-            List of tuples for httpx file transmission
+            List of tuples  for httpx file transmission
         """
         files = self.get_processable_files(raise_exception=False, silent=True)
-        return [
-            file.to_httpx_send_able_tuple() if not isinstance(file, MediaList)
-            else (k, file.to_httpx_send_able_tuple())
-            for k, file in files.items()
-        ]
+
+        ret = []
+        for k, file in files.items():
+            if isinstance(file, MediaList):
+                ret.extend(file.to_httpx_sendable_tuple(k))
+            elif isinstance(file, MediaDict):
+                fls = file.to_httpx_sendable_tuple()
+                if isinstance(fls, dict):
+                    ret.append((k, fls))
+                else:
+                    ret.extend(fls)
+            else:
+                ret.append((k, file.to_httpx_send_able_tuple()))
+
+        if len(ret) == 1:
+            return {ret[0][0]: ret[0][1]}
+        return ret
 
     def save(self, directory: Optional[str] = None):
         """
@@ -294,7 +304,7 @@ class MediaDict(IMediaFile):
         """Return dictionary items."""
         return self._media_files.items()
 
-    def update(self, files: Dict[str, Union[str, MediaFile, MediaList]]):
+    def update(self, files: Union['MediaDict', Dict[str, Union[str, MediaFile, MediaList]]]):
         """
         Update the dictionary with new files.
 
@@ -302,7 +312,7 @@ class MediaDict(IMediaFile):
             files: Dictionary of files to add or update
         """
         if not isinstance(files, dict) and not isinstance(files, MediaDict):
-            files = MediaDict().from_any({str(uuid.uuid4()): files})
+            files = {str(uuid.uuid4()): files}
 
         for key, file in files.items():
             self[key] = self._process_file(file)

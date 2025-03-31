@@ -5,3 +5,5 @@ from .video.video_file import VideoFile
 from .IMediaFile import IMediaFile
 from .MediaList import MediaList
 from .MediaDict import MediaDict
+
+__all__ = ["MediaFile", "ImageFile", "AudioFile", "VideoFile", "IMediaFile", "MediaList", "MediaDict"]

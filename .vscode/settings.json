@@ -1,0 +1,15 @@
+{
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}",
+    ],
+    "flake8.args": [
+        "--max-line-length=120",
+        "--ignore=E203,W503,E501"
+    ],
+    "python.analysis.diagnosticMode": "workspace",
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.include": [
+        "${workspaceFolder}/**/*.py",
+        "${workspaceFolder}/../**/*.py"
+    ]
+} 

@@ -51,7 +51,7 @@ class AudioFile(MediaFile):
         def generator():
             for i in range(n_chunks):
                 chunk = audio[i * chunk_size: i * chunk_size + chunk_size]
-                yield chunk.astype(np.float32) #.tobytes()
+                yield chunk.astype(np.float32)
 
         g = SimpleGeneratorWrapper(generator=generator(), length=n_chunks)
         g.sample_rate = sample_rate

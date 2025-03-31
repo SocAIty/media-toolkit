@@ -47,7 +47,8 @@ class MediaFile(IMediaFile):
 
     def from_any(self, data, allow_reads_from_disk: bool = True):
         """
-        Load a file from any supported data type. The file is loaded into the memory as bytes.
+        Load a file from any supported data type.
+        
         :param data: The data to load from. Can be a file path, url, base64 string, bytes, numpy array, file handle...
         :param allow_reads_from_disk:
             If True, the method will try to read from disk if the data is a file path. (Risky in web environments)
@@ -115,10 +116,6 @@ class MediaFile(IMediaFile):
     def from_bytesio(self, buffer: Union[io.BytesIO, BinaryIO], copy: bool = True):
         return self.from_bytesio_or_handle(buffer=buffer, copy=copy)
 
-    # @staticmethod
-    # @overload
-    # def from_file(path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
-    #    return MediaFile().from_file(path_or_handle)
     def from_file(self, path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
         """
         Load a file from a file path, file handle or base64 and convert it to BytesIO.
