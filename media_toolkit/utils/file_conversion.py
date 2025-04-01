@@ -3,6 +3,7 @@ import os.path
 from typing import Union, Any, Optional
 import mimetypes
 from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
+from media_toolkit.core import IMediaFile
 
 
 def guess_file_type(file_path: str) -> str:
@@ -40,7 +41,7 @@ def media_from_file(file_path: str) -> Union[MediaFile, ImageFile, AudioFile, Vi
 
 def media_from_any(
         file,
-        media_file_type: Optional[MediaFile] = None,
+        media_file_type: Optional[IMediaFile] = None,
         use_temp_file: Optional[bool] = False,
         temp_dir: Optional[str] = None,
         allow_reads_from_disk: Optional[bool] = False
@@ -57,12 +58,12 @@ def media_from_any(
     :return: The send able file.
     """
     # it is already converted
-    if isinstance(file, MediaFile):
+    if isinstance(file, IMediaFile):
         return file
 
     # determine target class
     target_class = MediaFile
-    if media_file_type is not None and inspect.isclass(media_file_type) and issubclass(media_file_type, MediaFile):
+    if media_file_type is not None and inspect.isclass(media_file_type) and issubclass(media_file_type, IMediaFile):
         target_class = media_file_type
     media_file_instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
 

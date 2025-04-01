@@ -362,7 +362,7 @@ class VideoFile(MediaFile):
                 audio = AudioSegment.from_file(temp_video_file_path)
                 # Calculate the audio_file segment duration per frame
                 audio_per_frame_duration = 1000 / stream.framerate  # duration of each video frame in ms
-            except:
+            except Exception:
                 include_audio = False
                 print("Could not extract audio_file from video file. Audio will not be included in the video stream.")
 
@@ -413,7 +413,10 @@ class VideoFile(MediaFile):
             # Safely close the video stream
             stream.stop()
             # Remove the temporary video file
-            os.remove(temp_video_file_path)
+            try:
+                os.remove(temp_video_file_path)
+            except Exception as e:
+                print(f"Could not remove temporary video file {temp_video_file_path}. Error: {e}")
             # accurate value instead of using cv2.CAP_PROP_FRAME_COUNT
             self.frame_count = frame_count
 

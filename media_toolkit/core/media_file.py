@@ -149,6 +149,9 @@ class MediaFile(IMediaFile):
         """
         # in file info all the meta is retrieved from the file.name in case of buffered reader
         content = starlette_upload_file.file.read()
+        if starlette_upload_file.size == 0:
+            raise ValueError("UploadFile file is empty.")
+
         self.file_name = starlette_upload_file.filename
         self.content_type = starlette_upload_file.content_type
         self.from_bytes(content)
