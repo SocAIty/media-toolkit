@@ -114,4 +114,3 @@ def media_from_FileModel(
         raise ValueError("Reading files from disk is not allowed. This can be a security risk.")
 
     return target_class().from_dict(file_result)
-

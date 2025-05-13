@@ -78,7 +78,7 @@ class MediaFile(IMediaFile):
             self.from_bytes(data)
         elif type(data).__name__ == 'ndarray':
             self.from_np_array(data)
-        elif hasattr(data, '__module__') and data.__module__ == 'starlette.datastructures' and type(data).__name__ == 'UploadFile':
+        elif self._is_starlette_upload_file(data):
             self.from_starlette_upload_file(data)
 
         return self
@@ -409,6 +409,10 @@ class MediaFile(IMediaFile):
             return False
 
         return urlparse(url).scheme in ['http', 'https']
+
+    @staticmethod
+    def _is_starlette_upload_file(data):
+        return hasattr(data, '__module__') and data.__module__ == 'starlette.datastructures' and type(data).__name__ == 'UploadFile'
 
     @staticmethod
     def _is_file_model(data: dict):

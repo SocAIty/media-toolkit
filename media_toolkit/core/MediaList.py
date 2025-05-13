@@ -62,15 +62,20 @@ class MediaList(IMediaFile, Generic[T]):
         if isinstance(file, IMediaFile):
             return file
 
-        if MediaFile._is_url(file):
-            if not self.download_files:
-                return file
-            return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_url(file)
+        if isinstance(file, str):
+            if MediaFile._is_url(file):
+                if not self.download_files:
+                    return file
+                return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_url(file)
 
-        if MediaFile._is_valid_file_path(file):
-            if not self.read_system_files:
-                return file
-            return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_file(file)
+            if MediaFile._is_valid_file_path(file):
+                if not self.read_system_files:
+                    return file
+                return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_file(file)
+            
+        if MediaFile._is_file_model(file):
+            from media_toolkit.utils import media_from_FileModel
+            return media_from_FileModel(file, allow_reads_from_disk=self.read_system_files)
 
         return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_any(file)
 

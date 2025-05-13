@@ -18,7 +18,11 @@ def requirement_decorator(requirement: str):
                 return func(*args, **kwargs)
 
             # find in modules
-            spec = find_spec(requirement)
+            try:
+                spec = find_spec(requirement)
+            except Exception as e:
+                raise ImportError(f"{requirement} is not installed. Please install {requirement} to use this function.")
+            
             if spec is None:
                 raise ImportError(f"{requirement} is not installed. Please install {requirement} to use this function.")
             _installed_libs.append(requirement)

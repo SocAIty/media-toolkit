@@ -5,7 +5,6 @@ from media_toolkit.core.IMediaFile import IMediaFile
 from media_toolkit.core.media_file import MediaFile
 from media_toolkit.core.MediaList import MediaList
 
-
 T = TypeVar('T', bound=IMediaFile)
 
 
@@ -75,6 +74,10 @@ class MediaDict(IMediaFile, Generic[T]):
                     return file
                 return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_file(file)
 
+        if MediaFile._is_file_model(file):
+            from media_toolkit.utils import media_from_FileModel
+            return media_from_FileModel(file, allow_reads_from_disk=self.read_system_files)
+
         if isinstance(file, list):
             return MediaList[T](
                 files=file,
@@ -84,7 +87,7 @@ class MediaDict(IMediaFile, Generic[T]):
                 temp_dir=self.temp_dir
             )
 
-        if isinstance(file, dict) and not MediaFile._is_file_model(file):
+        if isinstance(file, dict):
             return MediaDict[T](
                 files=file,
                 download_files=self.download_files,
@@ -316,6 +319,9 @@ class MediaDict(IMediaFile, Generic[T]):
         Args:
             files: Dictionary of files to add or update
         """
+        if files is None:
+            return
+
         if not isinstance(files, dict) and not isinstance(files, MediaDict):
             files = {str(uuid.uuid4()): files}
 
