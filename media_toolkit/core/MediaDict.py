@@ -48,6 +48,13 @@ class MediaDict(IMediaFile, Generic[T]):
         if files:
             self.update(files)
 
+    @staticmethod
+    def _is_empty_file(file: Any) -> bool:
+        """ Check if file has any content. """
+        if isinstance(file, list) and all(MediaDict._is_empty_file(item) for item in file):
+            return True
+        return file is None or (hasattr(file, '__len__') and len(file) == 0)
+            
     def _process_file(
             self,
             file: Union[str, T, MediaList[T], 'MediaDict[T]']
@@ -63,6 +70,11 @@ class MediaDict(IMediaFile, Generic[T]):
         if isinstance(file, (IMediaFile, MediaList, MediaDict)):
             return file
 
+        # check if is empty
+        if MediaDict._is_empty_file(file):
+            return file
+
+        # perform conversion
         if isinstance(file, str):
             if MediaFile._is_url(file):
                 if not self.download_files:

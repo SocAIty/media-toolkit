@@ -62,6 +62,10 @@ class MediaList(IMediaFile, Generic[T]):
         if isinstance(file, IMediaFile):
             return file
 
+        # check if is empty
+        if file is None or (hasattr(file, '__len__') and len(file) < 1):
+            return file
+                
         if isinstance(file, str):
             if MediaFile._is_url(file):
                 if not self.download_files:
