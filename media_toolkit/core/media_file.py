@@ -66,7 +66,10 @@ class MediaFile(IMediaFile):
             self.from_bytesio_or_handle(data)
         elif isinstance(data, str):
             if self._is_valid_file_path(data):
-                self.from_file(data)
+                if not allow_reads_from_disk:
+                    print(f"Reads from disk disabled. Skipping file {data}")
+                else:
+                    self.from_file(data)
             elif self._is_url(data):
                 self.from_url(data)
             else:
@@ -416,9 +419,16 @@ class MediaFile(IMediaFile):
 
     @staticmethod
     def _is_file_model(data: dict):
-        return isinstance(data, dict) and "file_name" in data and "content" in data
+        if not isinstance(data, dict):
+            if not hasattr(data, "__dict__"):
+                return False
+            data = dict(data)
+
+        return "file_name" in data and "content" in data
 
     def __sizeof__(self):
         """Returns the memory size of the instance + actual file/buffer size."""
-        size = super().__sizeof__() + self.file_size("bytes")
-        return size
+        cls_size = super().__sizeof__()
+        cls_size = cls_size if cls_size is not None else 0
+        file_size = self.file_size("bytes")
+        return cls_size + file_size

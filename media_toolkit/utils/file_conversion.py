@@ -86,6 +86,12 @@ def media_from_FileModel(
     :param default_return_if_not_file_result: The default return value if the file_result is not a valid file result.
     :return: The MediaFile.
     """
+    # compatibility with pydantic base models and other serializable objects
+    if not isinstance(file_result, dict):
+        if not hasattr(file_result, "__dict__"):
+            return default_return_if_not_file_result
+        file_result = dict(file_result)
+    
     if not MediaFile._is_file_model(file_result):
         if default_return_if_not_file_result is not None:
             return default_return_if_not_file_result
