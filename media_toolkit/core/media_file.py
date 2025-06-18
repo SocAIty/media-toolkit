@@ -422,7 +422,10 @@ class MediaFile(IMediaFile):
         if not isinstance(data, dict):
             if not hasattr(data, "__dict__"):
                 return False
-            data = dict(data)
+            try:
+                data = dict(data)
+            except Exception:
+                return False
 
         return "file_name" in data and "content" in data
 

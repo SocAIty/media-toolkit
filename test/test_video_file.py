@@ -2,11 +2,11 @@
 Tests some core functionalities of the VideoFile class.
 """
 from tqdm import tqdm
-
-from media_toolkit import VideoFile, ImageFile
+from media_toolkit import VideoFile
 import cv2
 
 outdir = "outdir/"
+
 
 def test_video_file():
     test_video = "test_files/test_video.mp4"
@@ -14,6 +14,8 @@ def test_video_file():
     # extract audio_file
     vf.extract_audio(f"{outdir}/extracted_audio.mp3")
     audio_bytes = vf.extract_audio()
+    assert audio_bytes is not None
+
 
 def test_video_from_files():
     files = [f"{outdir}/test_out_video_stream_{i}.png" for i in range(10)]
@@ -24,9 +26,11 @@ def test_video_from_files():
     fromdir = VideoFile().from_dir(outdir, audio=f"{outdir}/extracted_audio.mp3", frame_rate=30)
     fromdir.save(f"{outdir}/test_from_dir.mp4")
 
+
 def test_video_stream():
     audio_array = []
     image_paths = []
+    vf = VideoFile().from_file("test_files/test_video.mp4")
     for i, (img, audio_part) in tqdm(enumerate(vf.to_video_stream(include_audio=True))):
         p = f"{outdir}/test_out_video_stream_{i}.png"
         image_paths.append(p)
@@ -34,6 +38,6 @@ def test_video_stream():
         audio_array.append(audio_part)
 
     # test video clients with audio_file
+    fromdir = VideoFile().from_dir(outdir, audio=f"{outdir}/extracted_audio.mp3", frame_rate=30)
     fromstream = VideoFile().from_video_stream(fromdir.to_video_stream(include_audio=True))
     fromstream.save(f"{outdir}/test_from_stream.mp4")
-
