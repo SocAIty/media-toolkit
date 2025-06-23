@@ -1,7 +1,7 @@
 from urllib.parse import urlparse, urlunparse
 import httpx
 import tqdm
-from typing import Union, Tuple, Optional, BinaryIO
+from typing import Union, Tuple, Optional
 from io import BytesIO
 import os
 import re

@@ -17,8 +17,8 @@ except ImportError:
     pass
 
 try:
-    from vidgear.gears import VideoGear, WriteGear
-except:
+    from vidgear.gears import VideoGear
+except ImportError:
     pass
 
 try:
@@ -61,13 +61,17 @@ class VideoFile(MediaFile):
         # Merge video and audio_file using pydub
         if audio_file is not None:
             combined = add_audio_to_video_file(video_file=temp_vid_file_path, audio_file=audio_file)
-            self.from_file(combined)
+            # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
+            super(MediaFile, self).from_file(combined)
+            self._file_info()
             os.remove(combined)
             os.remove(temp_vid_file_path)
             return self
 
         # Init self from the temp file
-        self.from_file(temp_vid_file_path)
+        # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
+        super(MediaFile, self).from_file(temp_vid_file_path)
+        self._file_info()
         # remove tempfile
         os.remove(temp_vid_file_path)
 
@@ -124,7 +128,9 @@ class VideoFile(MediaFile):
 
         tmp = self._to_temp_file()
         combined = add_audio_to_video_file(tmp, audio_file)
-        self.from_file(combined)
+        # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
+        super(MediaFile, self).from_file(combined)
+        self._file_info()
         os.remove(tmp)
         os.remove(combined)
         return self
@@ -189,7 +195,9 @@ class VideoFile(MediaFile):
             try:
                 temp_audio_file = audio_array_to_audio_file(audio_frames, sample_rate=audio_sample_rate)
                 combined = add_audio_to_video_file(temp_video_file_path, temp_audio_file)
-                self.from_file(combined)
+                # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
+                super(MediaFile, self).from_file(combined)
+                self._file_info()
                 # cleanup
                 os.remove(temp_audio_file)
                 os.remove(temp_video_file_path)
@@ -199,10 +207,12 @@ class VideoFile(MediaFile):
                 print(f"Error adding audio_file to video. Returning video without audio. {e.__traceback__} ")
 
         # if no audio_file was added
-        self.from_file(temp_video_file_path)
+        # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
+        super(MediaFile, self).from_file(temp_video_file_path)
+        self._file_info()
         try:
             os.remove(temp_video_file_path)
-        except Exception as e:
+        except Exception:
             print(f"couldn't remove temp file {temp_video_file_path} after video was created from stream.")
 
         return self
@@ -244,20 +254,23 @@ class VideoFile(MediaFile):
         self.frame_rate = info_to_number(info, 'avg_frame_rate')
 
         # Use cv2 as fallback for frame rate and count if needed
-        if self.frame_rate is None or self.frame_count is None or self.frame_count == 1:
-            try:
-                cap = cv2.VideoCapture(path)
-                if self.frame_rate is None:
-                    self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
-                if self.frame_count is None or self.frame_count == 1:
-                    self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                cap.release()
-            finally:
-                if saved_to_temporary_file:
-                    try:
-                        os.remove(path)
-                    except:
-                        pass
+        try:
+            if self.frame_rate is None or self.frame_count is None or self.frame_count == 1:
+                try:
+                    cap = cv2.VideoCapture(path)
+                    if self.frame_rate is None:
+                        self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
+                    if self.frame_count is None or self.frame_count == 1:
+                        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    cap.release()
+                except Exception:
+                    pass
+        finally:
+            if saved_to_temporary_file:
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
         # Set content type based on format information
         if 'format_name' in info:
@@ -271,74 +284,6 @@ class VideoFile(MediaFile):
                     self.content_type = f"video/{ext[1:]}"
             else:
                 self.content_type = "video/mp4"  # default fallback
-
-    #@requires('cv2', 'pydub')
-    #def _file_info(self):
-    #    super()._file_info()  # sets: file_name, content_type.
-#
-    #    # care for the case that it was loaded from_bytes what usually does not provide any filename / info.
-    #    # In this case we need to write the data first to file and then retrieve the info again.
-    #    path = self.path
-    #    is_temp_file = False
-    #    if path is None or not os.path.exists(path):
-    #        self._content_buffer.seek(0)
-    #        path = self._to_temp_file()
-    #        is_temp_file = True
-#
-    #    # get video info
-    #    info = mediainfo(path)
-#
-    #    def info_to_number(key: str, default_val=None, cast=float):
-    #        if key in info:
-    #            val = info[key]
-    #            if val == 'N/A':
-    #                return default_val
-    #            # split if / in val and take first
-    #            val = val.split("/")[0]
-    #            return cast(val)
-    #        return default_val
-#
-    #    self.frame_count = info_to_number('nb_frames', cast=int)
-    #    self.duration = info_to_number('duration')
-    #    self.width = info_to_number('width', cast=int)
-    #    self.height = info_to_number('height', cast=int)
-    #    self.shape = (self.width, self.height)
-    #    self.audio_sample_rate = info_to_number('sample_rate', 44100)
-#
-    #    self.frame_rate = info_to_number('avg_frame_rate', None)
-    #    # need to determine the frame rate with cv2 because pydub calculation gives some weird results..
-    #    if self.frame_rate is None or self.frame_count is None or self.frame_count == 1:
-    #        cap = cv2.VideoCapture(path)
-    #        self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
-    #        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    #        cap.release()
-#
-    #    # if self.width is None or self.height is None:
-    #    #    # try to get it with cv2
-    #    #    cap = cv2.VideoCapture(path)
-    #    #    self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    #    #    self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    #    #    self.shape = (self.width, self.height)
-    #    #    self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
-    #    #    cap.release()
-    #    # else:
-    #    #    if self.frame_count is not None and self.duration is not None:
-    #    #        self.frame_rate = int(self.frame_count / self.duration)
-#
-    #    if 'format_name' in info:
-    #        format_name = info['format_name'].split(",")[0]
-    #        self.content_type = f"video/{format_name}"
-    #    else:
-    #        self.content_type = "video/mp4"  # overwrite default "application/octet-stream"
-#
-    #    # if is tempfile remove it
-    #    if is_temp_file:
-    #        try:
-    #            os.remove(path)
-    #        except Exception as e:
-    #            # If the file came from an buffered file, then the temp_file was not copied but kept in the buffer.
-    #            # The file is then already in use and thus can't be deleted.
-    #            pass
 
     @requires('vidgear')
     def to_image_stream(self):

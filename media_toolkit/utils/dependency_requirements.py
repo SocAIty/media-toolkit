@@ -22,7 +22,7 @@ def requirement_decorator(requirement: str):
                 spec = find_spec(requirement)
             except Exception as e:
                 raise ImportError(f"{requirement} is not installed. Please install {requirement} to use this function.")
-            
+
             if spec is None:
                 raise ImportError(f"{requirement} is not installed. Please install {requirement} to use this function.")
             _installed_libs.append(requirement)
@@ -34,8 +34,11 @@ def requirement_decorator(requirement: str):
 
 def requires_numpy():
     return requirement_decorator("numpy")
+
+
 def requires_cv2():
     return requirement_decorator("cv2")
+
 
 def requires(requirements: Union[list, tuple, str], *args):
     """
@@ -54,4 +57,3 @@ def requires(requirements: Union[list, tuple, str], *args):
         req_func = requirement_decorator(req)
 
     return req_func
-

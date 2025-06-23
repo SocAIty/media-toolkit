@@ -84,3 +84,4 @@ class IMediaFile(ABC):
     def __sizeof__(self):
         """Get the size of the file in bytes."""
         pass
+
