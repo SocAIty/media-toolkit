@@ -35,7 +35,7 @@ class VideoFile(MediaFile):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.content_type = "video"
+        self.content_type = "video/mp4"
         self.frame_count = None
         self.frame_rate = None
         self.width = None
@@ -220,11 +220,17 @@ class VideoFile(MediaFile):
     @requires('cv2', 'pydub')
     def _file_info(self):
         """
-        Gets video file information using mediainfo without necessarily writing to a temporary file.
+        Enhanced file info extraction with video-specific metadata.
+        Handles both filename extraction and content type detection in one pass.
+        Gets video file information using mediainfo and cv2 as fallback.
         Sets: file_name, content_type, frame_count, duration, width, height, shape, audio_sample_rate, frame_rate
         """
-        super()._file_info()  # sets: file_name, content_type
-
+        # First, handle basic filename extraction from parent
+        super()._file_info()
+        if self.file_size() == 0:
+            return
+        
+        # Then do video-specific content detection and metadata extraction
         # Helper function to parse mediainfo values
         def info_to_number(info_dict: dict, key: str, default_val=None, cast=float):
             if key in info_dict:
@@ -242,48 +248,37 @@ class VideoFile(MediaFile):
             path = self._to_temp_file()
             saved_to_temporary_file = True
 
-        info = mediainfo(path)
+        try:
+            info = mediainfo(path)
 
-        # Extract basic video information
-        self.frame_count = info_to_number(info, 'nb_frames', cast=int)
-        self.duration = info_to_number(info, 'duration')
-        self.width = info_to_number(info, 'width', cast=int)
-        self.height = info_to_number(info, 'height', cast=int)
-        self.shape = (self.width, self.height) if self.width and self.height else None
-        self.audio_sample_rate = info_to_number(info, 'sample_rate', 44100)
-        self.frame_rate = info_to_number(info, 'avg_frame_rate')
+            # Extract basic video information
+            self.frame_count = info_to_number(info, 'nb_frames', cast=int)
+            self.duration = info_to_number(info, 'duration')
+            self.width = info_to_number(info, 'width', cast=int)
+            self.height = info_to_number(info, 'height', cast=int)
+            self.shape = (self.width, self.height) if self.width and self.height else None
+            self.audio_sample_rate = info_to_number(info, 'sample_rate', 44100)
+            self.frame_rate = info_to_number(info, 'avg_frame_rate')
+        except Exception:
+            pass
 
         # Use cv2 as fallback for frame rate and count if needed
-        try:
-            if self.frame_rate is None or self.frame_count is None or self.frame_count == 1:
-                try:
-                    cap = cv2.VideoCapture(path)
-                    if self.frame_rate is None:
-                        self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
-                    if self.frame_count is None or self.frame_count == 1:
-                        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                    cap.release()
-                except Exception:
-                    pass
-        finally:
-            if saved_to_temporary_file:
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
+        if self.frame_rate is None or self.frame_count is None or self.frame_count == 1:
+            try:
+                cap = cv2.VideoCapture(path)
+                if self.frame_rate is None:
+                    self.frame_rate = cap.get(cv2.CAP_PROP_FPS)
+                if self.frame_count is None or self.frame_count == 1:
+                    self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                cap.release()
+            except Exception:
+                pass
 
-        # Set content type based on format information
-        if 'format_name' in info:
-            format_name = info['format_name'].split(",")[0]
-            self.content_type = f"video/{format_name}"
-        else:
-            # Try to determine format from file extension if available
-            if self.file_name:
-                ext = os.path.splitext(self.file_name)[1].lower()
-                if ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm']:
-                    self.content_type = f"video/{ext[1:]}"
-            else:
-                self.content_type = "video/mp4"  # default fallback
+        if saved_to_temporary_file:
+            try:
+                os.remove(path)
+            except Exception:
+                pass
 
     @requires('vidgear')
     def to_image_stream(self):
@@ -400,4 +395,3 @@ class VideoFile(MediaFile):
                 os.remove(self._temp_file_path)
             except Exception as e:
                 print("Could not delete temporary file. Error: ", e)
-

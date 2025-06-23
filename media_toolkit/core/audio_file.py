@@ -3,7 +3,6 @@ from typing import Optional
 from media_toolkit.utils.dependency_requirements import requires
 from media_toolkit.core.media_file import MediaFile
 from media_toolkit.utils.generator_wrapper import SimpleGeneratorWrapper
-from media_toolkit.utils.media_type_guesser import guess_content_type
 
 try:
     import soundfile
@@ -128,34 +127,26 @@ class AudioFile(MediaFile):
     def _file_info(self):
         """
         Enhanced file info extraction with audio-specific metadata.
-        Detects sample rate, channels, duration, and optimizes content type.
+        Handles both filename extraction and content type detection in one pass.
         """
+        # First, handle basic filename extraction from parent
         super()._file_info()
         
-        # Extract audio-specific information
+        # Then do audio-specific content detection and metadata extraction
         if self.file_size() > 0:
             try:
-                # Get audio properties using soundfile
+                # Get audio properties using soundfile for additional metadata
                 audio, sample_rate = self.to_np_array(return_sample_rate=True)
                 
                 # Cache audio properties
                 self._sample_rate = sample_rate
                 self._channels = 1 if audio.ndim == 1 else audio.shape[1]
                 self._duration = len(audio) / sample_rate
-                
-                # Improve content type detection
-                if self.file_name:
-                    detected_type = guess_content_type(self.file_name)
-                    if detected_type.startswith('audio/'):
-                        self.content_type = detected_type
                         
             except Exception as e:
-                print(f"Could not extract audio metadata: {e}")
-                # Fallback to filename-based detection
-                if self.file_name:
-                    detected_type = guess_content_type(self.file_name)
-                    if detected_type.startswith('audio/'):
-                        self.content_type = detected_type
+                # Fallback to default audio type if both content detection and soundfile fail
+                print(f"Could not extract audio metadata: {e}. Using default audio/wav content type.")
+                self.content_type = "audio/wav"
 
     @property
     def sample_rate(self) -> Optional[int]:

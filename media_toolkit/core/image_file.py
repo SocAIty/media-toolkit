@@ -2,7 +2,7 @@ import os.path
 from typing import Tuple
 from media_toolkit.utils.dependency_requirements import requires_numpy, requires_cv2, requires
 from media_toolkit.core.media_file import MediaFile
-from media_toolkit.utils.media_type_guesser import guess_content_type, MediaTypeGuesser
+from media_toolkit.core.content_detectors import PureMagicContentDetector
 
 try:
     import cv2
@@ -108,36 +108,45 @@ class ImageFile(MediaFile):
     def _file_info(self):
         """
         Enhanced file info extraction with image-specific metadata.
-        Detects image format, channels, and optimizes content type.
+        Handles both filename extraction and content type detection in one pass.
         """
+        # First, handle basic filename extraction from parent
         super()._file_info()
         
-        # Extract image-specific information
+        # Then do image-specific content detection and metadata extraction
         if self.file_size() > 0:
             try:
-                # Get image array for analysis
+                # Try content detection first
+                detected_class, content_type, extension = PureMagicContentDetector.detect_from_universal_file(self)
+                if content_type and content_type.startswith('image/'):
+                    self.content_type = content_type
+                
+                # Get image array for analysis and additional metadata
                 image_array = self.to_np_array()
                 
-                # Detect image properties
+                # Detect image properties using improved method for additional metadata
                 img_type, channels = self.detect_image_type_and_channels(image_array)
                 if img_type is not None:
-                    self.content_type = f"image/{img_type}"
+                    # Only override if content detection didn't provide a better result
+                    if not (content_type and content_type.startswith('image/')):
+                        self.content_type = f"image/{img_type}"
                     self._channels = channels
                     self._image_format = img_type
                     
             except Exception as e:
                 print(f"Could not extract image metadata: {e}")
-                # Fallback to filename-based detection
-                if self.file_name:
-                    detected_type = guess_content_type(self.file_name)
-                    if detected_type.startswith('image/'):
-                        self.content_type = detected_type
+                # Fallback to default image type if both content detection and cv2 fail
+                self.content_type = "image/jpeg"
 
     @staticmethod
     @requires('cv2', 'numpy')
     def detect_image_type_and_channels(image) -> Tuple[str, int]:
         """
         Advanced image type and channel detection using multiple strategies.
+        
+        This method uses a strategy pattern to test multiple encoding formats
+        and validates against magic bytes. It's kept for backwards compatibility
+        but could be enhanced to use the new content detectors.
         
         Args:
             image: Numpy array or list representing the image
@@ -175,9 +184,13 @@ class ImageFile(MediaFile):
                 success, encoded_image = cv2.imencode(ext, image)
                 if success:
                     encoded_bytes = encoded_image.tobytes()
-                    # validate with magic bytes
-                    media_info = MediaTypeGuesser._detect_from_content_inspection(encoded_bytes)
-                    if media_info.file_extension == ext:
+                    # Use content detector for validation
+                    try:
+                        detected_class, content_type, detected_ext = PureMagicContentDetector.detect_from_buffer(encoded_bytes)
+                        if detected_ext == img_type or (content_type and img_type in content_type):
+                            return img_type, channels
+                    except Exception:
+                        # Fallback to simple validation
                         return img_type, channels
             except Exception:
                 continue

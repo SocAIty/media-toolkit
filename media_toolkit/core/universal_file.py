@@ -8,7 +8,7 @@ from media_toolkit.core.IMediaFile import IMediaFile
 from media_toolkit.core.file_content_buffer import FileContentBuffer
 from media_toolkit.utils.dependency_requirements import requires_numpy
 from media_toolkit.utils import download_file
-from media_toolkit.utils.media_type_guesser import MediaTypeGuesser
+from media_toolkit.utils.data_type_utils import is_valid_file_path, is_url, is_starlette_upload_file
 
 try:
     import numpy as np
@@ -66,13 +66,13 @@ class UniversalFile(IMediaFile):
             if isinstance(data, (io.BufferedReader, io.BytesIO)):
                 self.from_bytesio_or_handle(data)
             elif isinstance(data, str):
-                if MediaTypeGuesser._is_valid_file_path(data):
+                if is_valid_file_path(data):
                     if not allow_reads_from_disk:
                         print(f"Reads from disk disabled. Skipping file {data}")
                         return None
                     else:
                         self.from_file(data)
-                elif MediaTypeGuesser._is_url(data):
+                elif is_url(data):
                     self.from_url(data)
                 else:
                     # Try base64 decoding
@@ -86,7 +86,7 @@ class UniversalFile(IMediaFile):
             elif type(data).__name__ == 'ndarray' or hasattr(data, '__array__') or (hasattr(data, 'dtype') and hasattr(data, 'shape')):
                 # Numpy array or array-like
                 self.from_np_array(data)
-            elif MediaTypeGuesser._is_starlette_upload_file(data):
+            elif is_starlette_upload_file(data):
                 self.from_starlette_upload_file(data)
             else:
                 print(f"Unsupported data type: {type(data)}")
@@ -407,4 +407,4 @@ class UniversalFile(IMediaFile):
         cls_size = super().__sizeof__()
         cls_size = cls_size if cls_size is not None else 0
         file_size = self.file_size("bytes")
-        return cls_size + file_size 
+        return cls_size + file_size

@@ -1,15 +1,12 @@
 import io
-import mimetypes
 import os
 from typing import Union, BinaryIO, Optional, Tuple
 import re
 
 from media_toolkit.core.universal_file import UniversalFile
 from media_toolkit.utils.dependency_requirements import requires_numpy
-from media_toolkit.utils.media_type_guesser import (
-    guess_content_type,
-    guess_file_extension,
-    MediaTypeGuesser
+from media_toolkit.utils.data_type_utils import (
+    is_valid_file_path, is_url, is_starlette_upload_file, is_file_model_dict
 )
 
 try:
@@ -24,7 +21,7 @@ class MediaFile(UniversalFile):
     Provides standardized conversions for BytesIO, base64, binary data, and various file sources.
     
     Features:
-    - Automatic type detection using advanced media_type_guesser
+    - Automatic type detection using advanced content detectors
     - Support for files, URLs, base64, bytes, numpy arrays, and upload files
     - Optional temporary file storage for large files
     - Backwards compatible API
@@ -233,11 +230,11 @@ class MediaFile(UniversalFile):
 
     def _file_info(self):
         """
-        Extract file metadata using advanced detection.
-        Called after loading content to determine filename, content type, etc.
-        Subclasses should call super()._file_info() and add specific metadata.
+        Extract basic file metadata - filename from path/temp file.
+        Content type detection is handled by subclasses or content detectors.
+        Base implementation only handles filename extraction.
         """
-        # cases when file_info is called
+        # cases when file_info is called. Documented for better understanding of the flow.
         # from_file -> retrieve info directly from the file path
         # from bytesio -> tempfile
         # from bytes -> tempfile
@@ -246,64 +243,54 @@ class MediaFile(UniversalFile):
         # from starlette_upload_file -> from_buffered_reader(spooled_temporary) -> info from the spooled_temporary
         # from base64 -> from-bytes -> tempfile
         # from url -> from bytesio
-        if self.path is not None:
-            # Extract from file path
-            self.file_name = os.path.basename(self.path)
-            self.content_type = guess_content_type(self.path)
-        elif hasattr(self._content_buffer, "name") and self._content_buffer.name is not None:
-            # Extract from temp file name
-            self.file_name = os.path.basename(self._content_buffer.name)
-            self.content_type = guess_content_type(self._content_buffer.name)
 
-        # Ensure we have a valid content type
-        if self.content_type is None:
-            self.content_type = "application/octet-stream"
+        # determine content type   
+        if not hasattr(self, 'content_type') or self.content_type is None:
+            from media_toolkit.core.content_detectors.puremagic_content_detector import PureMagicContentDetector
+            self.content_type = PureMagicContentDetector.detect_from_universal_file(self)
+
+        # Extract filename from path or temp file (always do this for metadata)
+        if self.path is not None:
+            self.file_name = os.path.basename(self.path)
+        elif hasattr(self._content_buffer, "name") and self._content_buffer.name is not None:
+            self.file_name = os.path.basename(self._content_buffer.name)
 
     @property
     def extension(self) -> Optional[str]:
         """
-        Get file extension using improved detection.
-        
+        Get file extension from filename.
+
         Returns:
             File extension without dot, or None if undetermined
         """
-        # Use improved media type guesser for extension detection
-        if self.file_name:
-            detected_extension = guess_file_extension(self.file_name)
-            if detected_extension:
-                return detected_extension
-        
-        # Fallback: try to guess from content type
-        if self.content_type and self.content_type != "application/octet-stream":
-            guessed_ext = mimetypes.guess_extension(self.content_type)
-            if guessed_ext:
-                return guessed_ext.replace(".", "").lower()
-        
-        # Final fallback: extract from filename manually
+        # Extract from filename
         if self.file_name and "." in self.file_name:
             return self.file_name.rsplit(".", 1)[-1].lower()
-        
+
+        if self.content_type and "/" in self.content_type:
+            return self.content_type.split("/")[-1].lower()
+
         return None
 
     @staticmethod
     def _is_valid_file_path(path: str):
         """Check if string is a valid file path."""
-        return MediaTypeGuesser._is_valid_file_path(path)
+        return is_valid_file_path(path)
 
     @staticmethod
     def _is_url(url: str):
         """Check if string is a valid URL."""
-        return MediaTypeGuesser._is_url(url)
+        return is_url(url)
 
     @staticmethod
     def _is_starlette_upload_file(data):
         """Check if data is a Starlette UploadFile."""
-        return MediaTypeGuesser._is_starlette_upload_file(data)
+        return is_starlette_upload_file(data)
 
     @staticmethod
     def _is_file_model(data: dict):
         """Check if dictionary matches FileModel format."""
-        return MediaTypeGuesser._is_file_model_dict(data)
+        return is_file_model_dict(data)
 
     def to_httpx_send_able_tuple(self):
         """Get tuple format suitable for HTTP client libraries."""
