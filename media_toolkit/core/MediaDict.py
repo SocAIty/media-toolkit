@@ -4,6 +4,8 @@ from typing import List, Union, Optional, Any, Dict, TypeVar, Generic
 from media_toolkit.core.IMediaFile import IMediaFile
 from media_toolkit.core.media_file import MediaFile
 from media_toolkit.core.MediaList import MediaList
+from media_toolkit.core.file_conversion import media_from_any, media_from_FileModel
+from media_toolkit.utils.data_type_utils import is_file_model_dict, is_url
 
 T = TypeVar('T', bound=IMediaFile)
 
@@ -53,6 +55,7 @@ class MediaDict(IMediaFile, Generic[T]):
         """ Check if file has any content. """
         if isinstance(file, list) and all(MediaDict._is_empty_file(item) for item in file):
             return True
+        
         return file is None or (hasattr(file, '__len__') and len(file) == 0)
             
     def _process_file(
@@ -76,18 +79,12 @@ class MediaDict(IMediaFile, Generic[T]):
 
         # perform conversion
         if isinstance(file, str):
-            if MediaFile._is_url(file):
+            if is_url(file):
                 if not self.download_files:
                     return file
-                return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_url(file)
+                return media_from_any(file, allow_reads_from_disk=self.read_system_files)
 
-            if MediaFile._is_valid_file_path(file):
-                if not self.read_system_files:
-                    return file
-                return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_file(file)
-
-        if MediaFile._is_file_model(file):
-            from media_toolkit.utils import media_from_FileModel
+        if is_file_model_dict(file):
             return media_from_FileModel(file, allow_reads_from_disk=self.read_system_files)
 
         if isinstance(file, list):
@@ -108,7 +105,7 @@ class MediaDict(IMediaFile, Generic[T]):
                 temp_dir=self.temp_dir
             )
 
-        return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_any(file)
+        return media_from_any(file, use_temp_file=self.use_temp_file, temp_dir=self.temp_dir)
 
     def from_any(
             self,

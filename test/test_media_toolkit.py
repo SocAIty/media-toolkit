@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
-from media_toolkit.utils.file_conversion import (
+from media_toolkit.core.file_conversion import (
     media_from_numpy,
     media_from_any,
     media_from_file,

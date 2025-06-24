@@ -133,7 +133,7 @@ class ImageFile(MediaFile):
                 self.content_type = "image/jpeg"
 
     @requires('cv2', 'numpy')
-    def detect_image_type_and_channels(self,image, default_image_type_return: str = "png") -> Tuple[str, int]:
+    def detect_image_type_and_channels(self, image, default_image_type_return: str = "png") -> Tuple[str, int]:
         """
         Advanced image type and channel detection using multiple strategies.
         

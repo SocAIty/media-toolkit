@@ -2,6 +2,7 @@ import io
 from typing import List, Union, Optional, Any, TypeVar, Generic
 from media_toolkit.core.media_file import MediaFile
 from media_toolkit.core.IMediaFile import IMediaFile
+from media_toolkit.core.file_conversion import media_from_any, media_from_FileModel
 import os
 
 T = TypeVar('T', bound=IMediaFile)
@@ -70,18 +71,17 @@ class MediaList(IMediaFile, Generic[T]):
             if MediaFile._is_url(file):
                 if not self.download_files:
                     return file
-                return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_url(file)
+                return media_from_any(file, allow_reads_from_disk=self.read_system_files)
 
             if MediaFile._is_valid_file_path(file):
                 if not self.read_system_files:
                     return file
-                return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_file(file)
+                return media_from_any(file, allow_reads_from_disk=self.read_system_files)
             
         if MediaFile._is_file_model(file):
-            from media_toolkit.utils import media_from_FileModel
             return media_from_FileModel(file, allow_reads_from_disk=self.read_system_files)
 
-        return MediaFile(use_temp_file=self.use_temp_file, temp_dir=self.temp_dir).from_any(file)
+        return media_from_any(file, use_temp_file=self.use_temp_file, temp_dir=self.temp_dir)
 
     def from_any(self, data: List[Union[str, T]], allow_reads_from_disk: bool = True) -> 'MediaList[T]':
         if isinstance(data, list):

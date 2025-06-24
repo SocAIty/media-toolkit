@@ -7,7 +7,7 @@ from typing import Union, BinaryIO, Tuple, Optional
 from media_toolkit.core.IMediaFile import IMediaFile
 from media_toolkit.core.file_content_buffer import FileContentBuffer
 from media_toolkit.utils.dependency_requirements import requires_numpy
-from media_toolkit.utils.utils import download_file
+from media_toolkit.utils.download_helper import download_file
 from media_toolkit.utils.data_type_utils import is_valid_file_path, is_url, is_starlette_upload_file
 
 try:
@@ -194,7 +194,6 @@ class UniversalFile(IMediaFile):
             err_str = base64_str if len(base64_str) <= 50 else base64_str[:50] + "..."
             raise ValueError(f"Could not decode base64 string: {err_str}")
 
-    @requires_numpy()
     def from_np_array(self, np_array: np.array):
         """
         Load from numpy array using numpy's save format.
