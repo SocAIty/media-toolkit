@@ -18,20 +18,21 @@ class PureMagicContentDetector:
     _EXTENSION_TO_CLASS = {
         # Image formats - fully supported
         'jpg': 'ImageFile',
-        'jpeg': 'ImageFile', 
+        'jpeg': 'ImageFile',
         'png': 'ImageFile',
-        'gif': 'ImageFile',
+        'gif': 'ImageFile',  # Only single frame in cv2
         'bmp': 'ImageFile',
         'tiff': 'ImageFile',
         'tif': 'ImageFile',
-        'ico': 'ImageFile',
-        'svg': 'ImageFile',
-        
-        # Image formats - limited support (use MediaFile)
+
+        # Image formats - limited support (use MediaFile). 
+        # Consider install of pillow
+        'ico': 'MediaFile',
         'webp': 'MediaFile',  # Not fully supported in ImageFile yet
         'avif': 'MediaFile',  # AVIF not widely supported yet
         'heic': 'MediaFile',  # HEIC requires special libraries
         'heif': 'MediaFile',  # HEIF requires special libraries
+        'svg': 'MediaFile',
         
         # Audio formats
         'wav': 'AudioFile',
@@ -69,6 +70,9 @@ class PureMagicContentDetector:
         'xml': 'MediaFile',
         'pdf': 'MediaFile',
         'zip': 'MediaFile',
+        '7z': 'MediaFile',
+        'tar': 'MediaFile',
+        'gz': 'MediaFile'
     }
     
     @classmethod
@@ -83,35 +87,29 @@ class PureMagicContentDetector:
             Tuple of (media_class_name, content_type, file_extension)
         """
         try:
-            # Get bytes from universal file
-            universal_file._content_buffer.seek(0)
-            content_bytes = universal_file._content_buffer.read(1024)  # Read first 1KB for magic detection
-            universal_file._content_buffer.seek(0)
-            
-            if not content_bytes:
-                return 'MediaFile', 'application/octet-stream', None
-                
             # Use puremagic to detect file type
-            matches = puremagic.magic_array(content_bytes)
+            matches = puremagic.magic_stream(universal_file._content_buffer)
             
-            if matches:
-                # Get the best match (highest confidence)
-                best_match = matches[0]
-                extension = best_match.extension.lower() if best_match.extension else None
-                mime_type = best_match.mime_type if hasattr(best_match, 'mime_type') else None
+            if not matches or len(matches) == 0:
+                return 'MediaFile', 'application/octet-stream', None
+
+            # Get the best match (highest confidence)
+            best_match = matches[0]
+            extension = best_match.extension.lower().replace('.', '') if best_match.extension else None
+            mime_type = best_match.mime_type if hasattr(best_match, 'mime_type') else None
+            
+            # Map extension to media class
+            media_class = cls._EXTENSION_TO_CLASS.get(extension, 'MediaFile')
+            
+            # Use detected mime type or construct from extension
+            if mime_type:
+                content_type = mime_type
+            elif extension:
+                content_type = cls._extension_to_mime_type(extension)
+            else:
+                content_type = 'application/octet-stream'
                 
-                # Map extension to media class
-                media_class = cls._EXTENSION_TO_CLASS.get(extension, 'MediaFile')
-                
-                # Use detected mime type or construct from extension
-                if mime_type:
-                    content_type = mime_type
-                elif extension:
-                    content_type = cls._extension_to_mime_type(extension)
-                else:
-                    content_type = 'application/octet-stream'
-                    
-                return media_class, content_type, extension
+            return media_class, content_type, extension
                 
         except Exception:
             # Fallback if puremagic fails
@@ -145,7 +143,7 @@ class PureMagicContentDetector:
                 return 'MediaFile', 'application/octet-stream', None
                 
             # Use puremagic to detect file type
-            matches = puremagic.magic_array(content_bytes)
+            matches = puremagic.magic_string(content_bytes)
             
             if matches:
                 # Get the best match (highest confidence)
@@ -218,6 +216,10 @@ class PureMagicContentDetector:
             'npz': 'file/npz',
             'pkl': 'file/pickle',
             'pickle': 'file/pickle',
+            'zip': 'file/zip',
+            '7z': 'file/7z',
+            'tar': 'file/tar',
+            'gz': 'file/gzip'
         }
         
         return extension_mime_map.get(extension.lower(), 'application/octet-stream') 

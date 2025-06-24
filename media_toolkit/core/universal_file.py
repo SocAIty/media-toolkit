@@ -7,7 +7,7 @@ from typing import Union, BinaryIO, Tuple, Optional
 from media_toolkit.core.IMediaFile import IMediaFile
 from media_toolkit.core.file_content_buffer import FileContentBuffer
 from media_toolkit.utils.dependency_requirements import requires_numpy
-from media_toolkit.utils import download_file
+from media_toolkit.utils.utils import download_file
 from media_toolkit.utils.data_type_utils import is_valid_file_path, is_url, is_starlette_upload_file
 
 try:
@@ -265,11 +265,9 @@ class UniversalFile(IMediaFile):
         """Get file content as bytes."""
         return self.read()
 
-    def read(self) -> bytes:
+    def read(self, number_of_bytes: int = None) -> bytes:
         """Read file content as bytes."""
-        self._content_buffer.seek(0)
-        res = self._content_buffer.read()
-        self._content_buffer.seek(0)
+        res = self._content_buffer.read(number_of_bytes)
         return res
 
     def to_bytes_io(self) -> io.BytesIO:
@@ -401,7 +399,7 @@ class UniversalFile(IMediaFile):
             pass
 
         return None, None
-
+    
     def __sizeof__(self):
         """Get total memory size including file content."""
         cls_size = super().__sizeof__()

@@ -72,7 +72,7 @@ class FileContentBuffer:
         else:
             self._memory_buffer.write(data)
 
-    def read(self) -> bytes:
+    def read(self, number_of_bytes: int = None) -> bytes:
         """Read all content from the buffer.
 
         Returns:
@@ -80,21 +80,25 @@ class FileContentBuffer:
         """
         if self._use_temp_file:
             self._temp_file.seek(0)
-            return self._temp_file.read()
+            content = self._temp_file.read(number_of_bytes)
+            self._temp_file.seek(0)
         else:
             self._memory_buffer.seek(0)
-            return self._memory_buffer.read()
+            content = self._memory_buffer.read(number_of_bytes)
+            self._memory_buffer.seek(0)
+        return content
 
-    def seek(self, offset: int):
+    def seek(self, offset: int, whence: int = 0):
         """Seek to given position in buffer.
 
         Args:
             offset (int): Position to seek to.
+            whence (int): Origin of the seek.
         """
         if self._use_temp_file:
-            self._temp_file.seek(offset)
+            self._temp_file.seek(offset, whence)
         else:
-            self._memory_buffer.seek(offset)
+            self._memory_buffer.seek(offset, whence)
 
     def truncate(self, size: int):
         """Truncate buffer to given size.

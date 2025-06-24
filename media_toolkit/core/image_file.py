@@ -172,26 +172,22 @@ class ImageFile(MediaFile):
             raise ValueError(f"Unsupported image shape: {image.shape}")
 
         # Try multiple encoding formats for format detection
-        format_encodings = [
-            ('.png', 'png'),
-            ('.jpg', 'jpeg'),
-            ('.bmp', 'bmp'),
-            ('.tiff', 'tiff')
-        ]
+        format_encodings = [".png", ".jpg", ".bmp", ".tiff", ".tif"]
 
-        for ext, img_type in format_encodings:
+        for ext in format_encodings:
             try:
                 success, encoded_image = cv2.imencode(ext, image)
                 if success:
-                    encoded_bytes = encoded_image.tobytes()
+                    # just using first 1000 bytes for content detection to be little faster
+                    encoded_bytes = encoded_image[:1000].tobytes()
                     # Use content detector for validation
                     try:
                         detected_class, content_type, detected_ext = PureMagicContentDetector.detect_from_buffer(encoded_bytes)
-                        if detected_ext == img_type or (content_type and img_type in content_type):
-                            return img_type, channels
+                        if detected_ext == ext:
+                            return ext.replace(".", ""), channels
                     except Exception:
                         # Fallback to simple validation
-                        return img_type, channels
+                        continue
             except Exception:
                 continue
 

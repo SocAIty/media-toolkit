@@ -54,7 +54,7 @@ class AudioFile(MediaFile):
             Numpy array or tuple of (array, sample_rate)
         """
         self._content_buffer.seek(0)
-        audio, sample_rate = soundfile.read(self._content_buffer, samplerate=sr)
+        audio, sample_rate = soundfile.read(self.to_bytes_io(), samplerate=sr)
         
         # Cache detected properties
         if self._sample_rate is None:

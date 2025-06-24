@@ -14,6 +14,7 @@ license = {file = "LICENSE"}
 readme = "README.md"
 dependencies = [
     "numpy>=1.18.0",
+    "puremagic>=1.29.0",
     "tqdm",
     "httpx"
 ]
@@ -33,6 +34,14 @@ AudioFile = [
     "pydub"
 ]
 VideoFile = [
+    "opencv-python>=4.2",
+    "numpy>=1.18.0",
+    "soundfile>=0.12.0",
+    "pydub",
+    "vidgear[core]"
+]
+dev = [
+    "pytest",
     "opencv-python>=4.2",
     "numpy>=1.18.0",
     "soundfile>=0.12.0",

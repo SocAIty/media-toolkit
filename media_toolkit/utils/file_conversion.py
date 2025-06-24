@@ -4,15 +4,19 @@ Provides generalized file handling with automatic type detection.
 """
 import inspect
 from typing import Union, Any, Optional, Type
-from media_toolkit.core import IMediaFile, UniversalFile
+from media_toolkit.core.IMediaFile import IMediaFile
+from media_toolkit.core.universal_file import UniversalFile
 from media_toolkit.core.content_detectors import PureMagicContentDetector, NumpyContentTypeDetector
 from media_toolkit.utils.data_type_utils import (
     is_numpy_array_like, is_file_model_dict,
     is_valid_file_path
 )
 
-
-from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
+# Import directly from core modules to avoid circular imports
+from media_toolkit.core.media_file import MediaFile
+from media_toolkit.core.image_file import ImageFile
+from media_toolkit.core.audio_file import AudioFile
+from media_toolkit.core.video.video_file import VideoFile
 
 MediaFileType = Union[MediaFile, ImageFile, AudioFile, VideoFile]
 
@@ -148,7 +152,8 @@ def media_from_numpy(
     
     # Auto-detect using NumpyContentTypeDetector
     try:
-        media_type, detected_class_name = NumpyContentTypeDetector.detect_numpy_content_type(np_array)
+        media_type, extension = NumpyContentTypeDetector.detect_numpy_content_type(np_array)
+        detected_class_name = _interpret_type_hint(extension)
         target_class = _resolve_media_class(detected_class_name)
         instance = _create_media_instance(target_class, use_temp_file, temp_dir)
         

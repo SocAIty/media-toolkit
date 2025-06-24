@@ -1,4 +1,3 @@
-from .universal_file import UniversalFile
 from .media_file import MediaFile
 from .image_file import ImageFile
 from .audio_file import AudioFile
@@ -7,4 +6,4 @@ from .IMediaFile import IMediaFile
 from .MediaList import MediaList
 from .MediaDict import MediaDict
 
-__all__ = ["UniversalFile", "MediaFile", "ImageFile", "AudioFile", "VideoFile", "IMediaFile", "MediaList", "MediaDict"]
+__all__ = ["MediaFile", "ImageFile", "AudioFile", "VideoFile", "IMediaFile", "MediaList", "MediaDict"]

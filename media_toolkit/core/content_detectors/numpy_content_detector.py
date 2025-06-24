@@ -19,7 +19,7 @@ class NumpyContentTypeDetector:
     
     @classmethod
     @requires_numpy()
-    def detect_numpy_content_type(cls, np_array) -> Tuple[str, str]:
+    def detect_numpy_content_type(cls, np_array) -> Tuple[str, str, str]:
         """
         Analyze numpy array to determine media type.
         
@@ -27,30 +27,30 @@ class NumpyContentTypeDetector:
             np_array: Numpy array to analyze
             
         Returns:
-            Tuple of (media_type, media_class_name) where:
+            Tuple of (media_type, extension) where:
             - media_type: 'image', 'video', 'audio', or 'npy'
-            - media_class_name: 'ImageFile', 'VideoFile', 'AudioFile', or 'MediaFile'
+            - extension: probable file extension like 'png', 'mp4', 'wav', or 'npy'
         """
         if not hasattr(np_array, 'shape') or not hasattr(np_array, 'dtype'):
-            return 'npy', 'MediaFile'
+            return 'file', 'npy'
             
         shape = np_array.shape
         dtype = np_array.dtype
         
+        # Check for video patterns first (to handle 4D arrays correctly)
+        if cls._is_likely_video(shape, dtype):
+            return 'video', 'mp4'
+            
         # Check for image patterns
         if cls._is_likely_image(shape, dtype):
-            return 'image', 'ImageFile'
-            
-        # Check for video patterns  
-        if cls._is_likely_video(shape, dtype):
-            return 'video', 'VideoFile'
+            return 'image', 'png'
             
         # Check for audio patterns
         if cls._is_likely_audio(shape, dtype):
-            return 'audio', 'AudioFile'
+            return 'audio', 'wav'
             
         # Default to generic numpy file
-        return 'npy', 'MediaFile'
+        return 'file', 'npy'
     
     @staticmethod
     def _is_likely_image(shape: tuple, dtype) -> bool:
@@ -60,7 +60,7 @@ class NumpyContentTypeDetector:
         Image patterns:
         - 2D: (height, width) - grayscale
         - 3D: (height, width, channels) - RGB/RGBA/etc
-        - 4D: (batch, height, width, channels) - batch of images
+        - 4D: Only for single images with batch dimension of 1
         """
         ndim = len(shape)
         
@@ -76,14 +76,6 @@ class NumpyContentTypeDetector:
             height, width, channels = shape
             # Common channel counts: 1(gray), 3(RGB), 4(RGBA)
             return (10 <= height <= 10000 and 10 <= width <= 10000 and 
-                    channels in [1, 3, 4] and
-                    dtype in [np.uint8, np.uint16, np.float32, np.float64, np.int8, np.int16])
-        
-        # 4D batch of images
-        elif ndim == 4:
-            batch, height, width, channels = shape
-            # Small batch sizes, reasonable image dimensions
-            return (1 <= batch <= 1000 and 10 <= height <= 10000 and 10 <= width <= 10000 and
                     channels in [1, 3, 4] and
                     dtype in [np.uint8, np.uint16, np.float32, np.float64, np.int8, np.int16])
         
@@ -104,7 +96,7 @@ class NumpyContentTypeDetector:
         if ndim == 4:
             frames, height, width, channels = shape
             # Multiple frames, reasonable video dimensions
-            return (2 <= frames <= 100000 and 10 <= height <= 4096 and 10 <= width <= 4096 and
+            return (frames >= 2 and 10 <= height <= 4096 and 10 <= width <= 4096 and
                     channels in [1, 3, 4] and
                     dtype in [np.uint8, np.uint16, np.float32, np.float64, np.int8, np.int16])
         
@@ -112,7 +104,7 @@ class NumpyContentTypeDetector:
         elif ndim == 5:
             batch, frames, height, width, channels = shape
             # Small batch, multiple frames, reasonable dimensions
-            return (1 <= batch <= 100 and 2 <= frames <= 10000 and 
+            return (1 <= batch <= 100 and frames >= 2 and 
                     10 <= height <= 4096 and 10 <= width <= 4096 and
                     channels in [1, 3, 4] and
                     dtype in [np.uint8, np.uint16, np.float32, np.float64, np.int8, np.int16])
@@ -154,4 +146,4 @@ class NumpyContentTypeDetector:
                 return (800 <= samples <= 69120000 and
                         dtype in [np.int16, np.int32, np.float32, np.float64, np.uint8, np.int8])
         
-        return False 
+        return False

@@ -291,6 +291,9 @@ class VideoFile(MediaFile):
         :param include_audio: if the audio_file is included in the video stream. If not it will only yield the video frames.
         :return:
         """
+        if self.file_size() == 0:
+            raise ValueError("The video file is empty.")
+
         self._content_buffer.seek(0)
         # because CamGear does not support reading from a BytesIO buffer, we need to save the buffer to a temporary file
         temp_video_file_path = self._to_temp_file()
