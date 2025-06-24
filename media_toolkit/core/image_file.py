@@ -47,7 +47,7 @@ class ImageFile(MediaFile):
         # Auto-detect image type if not specified
         if img_type is None:
             if "image/" not in self.content_type:
-                img_type, self._channels = self.detect_image_type_and_channels(np_array)
+                img_type, self._channels = self.detect_image_type_and_channels(np_array, default_image_type_return='png')
             else:
                 img_type = self.content_type.split("/")[1]
             self.content_type = f"image/{img_type}"
@@ -116,20 +116,14 @@ class ImageFile(MediaFile):
         # Then do image-specific content detection and metadata extraction
         if self.file_size() > 0:
             try:
-                # Try content detection first
-                detected_class, content_type, extension = PureMagicContentDetector.detect_from_universal_file(self)
-                if content_type and content_type.startswith('image/'):
-                    self.content_type = content_type
-                
                 # Get image array for analysis and additional metadata
                 image_array = self.to_np_array()
                 
                 # Detect image properties using improved method for additional metadata
-                img_type, channels = self.detect_image_type_and_channels(image_array)
+                img_type, channels = self.detect_image_type_and_channels(image_array, default_image_type_return=None)
                 if img_type is not None:
-                    # Only override if content detection didn't provide a better result
-                    if not (content_type and content_type.startswith('image/')):
-                        self.content_type = f"image/{img_type}"
+                    # Override content type based on cv2 strategy
+                    self.content_type = f"image/{img_type}"
                     self._channels = channels
                     self._image_format = img_type
                     
@@ -138,9 +132,8 @@ class ImageFile(MediaFile):
                 # Fallback to default image type if both content detection and cv2 fail
                 self.content_type = "image/jpeg"
 
-    @staticmethod
     @requires('cv2', 'numpy')
-    def detect_image_type_and_channels(image) -> Tuple[str, int]:
+    def detect_image_type_and_channels(self,image, default_image_type_return: str = "png") -> Tuple[str, int]:
         """
         Advanced image type and channel detection using multiple strategies.
         
@@ -174,6 +167,12 @@ class ImageFile(MediaFile):
         # Try multiple encoding formats for format detection
         format_encodings = [".png", ".jpg", ".bmp", ".tiff", ".tif"]
 
+        # if content type is already set, try to start with that
+        if self.content_type and self.content_type.startswith('image/'):
+            ext = "." + self.extension
+            format_encodings.insert(0, ext)
+            format_encodings = set(format_encodings)
+
         for ext in format_encodings:
             try:
                 success, encoded_image = cv2.imencode(ext, image)
@@ -192,7 +191,7 @@ class ImageFile(MediaFile):
                 continue
 
         # Default fallback
-        return 'png', channels
+        return default_image_type_return, channels
 
     @property
     def channels(self) -> int:

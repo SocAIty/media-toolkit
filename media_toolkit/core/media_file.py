@@ -244,7 +244,7 @@ class MediaFile(UniversalFile):
         # from base64 -> from-bytes -> tempfile
         # from url -> from bytesio
 
-        # determine content type   
+        # determine content type
         if not hasattr(self, 'content_type') or self.content_type is None:
             from media_toolkit.core.content_detectors.puremagic_content_detector import PureMagicContentDetector
             self.content_type = PureMagicContentDetector.detect_from_universal_file(self)
