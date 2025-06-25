@@ -32,14 +32,6 @@ def _resolve_media_class(class_name: str) -> Type[IMediaFile]:
     return class_map.get(class_name, MediaFile)
 
 
-def _create_media_instance(
-    target_class: Type[IMediaFile],
-    use_temp_file: bool = False,
-    temp_dir: Optional[str] = None
-) -> IMediaFile:
-    """Helper to create media instance with common parameters."""
-    return target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
-
 
 def _interpret_type_hint(type_hint) -> Optional[str]:
     """
@@ -132,7 +124,7 @@ def media_from_numpy(
     if hint_class_name:
         try:
             target_class = _resolve_media_class(hint_class_name)
-            instance = _create_media_instance(target_class, use_temp_file, temp_dir)
+            instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
             
             # Try to create from numpy array using the hinted class
             if hasattr(instance, 'from_np_array'):
@@ -142,7 +134,7 @@ def media_from_numpy(
                 universal = UniversalFile(use_temp_file, temp_dir)
                 universal.from_np_array(np_array)
                 
-                target_instance = _create_media_instance(target_class, use_temp_file, temp_dir)
+                target_instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
                 target_instance.from_bytes(universal.to_bytes())
                 return target_instance
                 
@@ -155,7 +147,7 @@ def media_from_numpy(
         media_type, extension = NumpyContentTypeDetector.detect_numpy_content_type(np_array)
         detected_class_name = _interpret_type_hint(extension)
         target_class = _resolve_media_class(detected_class_name)
-        instance = _create_media_instance(target_class, use_temp_file, temp_dir)
+        instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
         
         # Try to create from numpy array 
         if hasattr(instance, 'from_np_array'):
@@ -170,7 +162,7 @@ def media_from_numpy(
             
     except Exception:
         # Final fallback to MediaFile
-        fallback = _create_media_instance(MediaFile, use_temp_file, temp_dir)
+        fallback = MediaFile(use_temp_file=use_temp_file, temp_dir=temp_dir)
         universal = UniversalFile(use_temp_file, temp_dir)
         universal.from_np_array(np_array)
         fallback.from_bytes(universal.to_bytes())
@@ -213,7 +205,7 @@ def media_from_any(
             if hint_class_name:
                 try:
                     target_class = _resolve_media_class(hint_class_name)
-                    instance = _create_media_instance(target_class, use_temp_file, temp_dir)
+                    instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
                     return instance.from_dict(data)
                 except Exception:
                     pass
@@ -230,14 +222,14 @@ def media_from_any(
             target_class_name = 'MediaFile'
             
         target_class = _resolve_media_class(target_class_name)
-        instance = _create_media_instance(target_class, use_temp_file, temp_dir)
+        instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
         return instance.from_dict(data)
 
     # Load data into UniversalFile first
     universal = UniversalFile(use_temp_file, temp_dir)
     
     try:
-        universal.from_any(data, allow_reads_from_disk)
+        universal.from_any(data, allow_reads_from_disk=allow_reads_from_disk)
     except Exception as e:
         # If loading fails, return None or raise
         raise ValueError(f"Could not load data: {e}")
@@ -260,12 +252,12 @@ def media_from_any(
     target_class = _resolve_media_class(target_class_name)
     
     try:
-        instance = _create_media_instance(target_class, use_temp_file, temp_dir)
+        instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
         instance.from_bytes(universal.to_bytes())
         return instance
     except Exception:
         # Fallback to MediaFile if target class fails
-        fallback = _create_media_instance(MediaFile, use_temp_file, temp_dir)
+        fallback = MediaFile(use_temp_file=use_temp_file, temp_dir=temp_dir)
         fallback.from_bytes(universal.to_bytes())
         return fallback
 

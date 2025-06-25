@@ -14,7 +14,6 @@ from media_toolkit.core.file_conversion import (
     media_from_file,
     media_from_FileModel,
     _resolve_media_class,
-    _create_media_instance,
     _interpret_type_hint
 )
 
@@ -143,14 +142,6 @@ class TestFileConversionUtilities:
         assert _resolve_media_class("AudioFile") == AudioFile
         assert _resolve_media_class("VideoFile") == VideoFile
         assert _resolve_media_class("InvalidClass") == MediaFile  # fallback
-
-    def test_create_media_instance(self):
-        """Test _create_media_instance function."""
-        instance = _create_media_instance(ImageFile)
-        assert isinstance(instance, ImageFile)
-        
-        instance = _create_media_instance(AudioFile, use_temp_file=True)
-        assert isinstance(instance, AudioFile)
 
     def test_media_from_numpy_with_hint(self):
         """Test media_from_numpy with type hints."""
@@ -323,9 +314,6 @@ def run_all_tests():
     
     conversion_tests.test_resolve_media_class()
     print("✓ Media class resolution test passed")
-    
-    conversion_tests.test_create_media_instance()
-    print("✓ Media instance creation test passed")
     
     conversion_tests.test_media_from_numpy_with_hint()
     print("✓ Numpy conversion with hint test passed")

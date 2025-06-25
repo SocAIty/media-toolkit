@@ -8,6 +8,7 @@ from media_toolkit.utils.dependency_requirements import requires_numpy
 from media_toolkit.utils.data_type_utils import (
     is_valid_file_path, is_url, is_starlette_upload_file, is_file_model_dict
 )
+from media_toolkit.utils.download_helper import download_file
 
 try:
     import numpy as np
@@ -29,8 +30,8 @@ class MediaFile(UniversalFile):
     
     def __init__(
             self,
-            file_name: str = "file",
-            content_type: str = "application/octet-stream",
+            file_name: str = None,
+            content_type: str = None,
             use_temp_file: bool = False,
             temp_dir: str = None
     ):
@@ -39,7 +40,7 @@ class MediaFile(UniversalFile):
         
         Args:
             file_name: Initial filename (may be overwritten by from_* methods)
-            content_type: Initial content type (may be overwritten by from_* methods)
+            content_type: Set a content_type. If set, the mediafile might not try to detect the content type.
             use_temp_file: Use temporary file storage for large files
             temp_dir: Directory for temporary files (uses system default if None)
         """
@@ -199,7 +200,6 @@ class MediaFile(UniversalFile):
             Self for method chaining
         """
         # Extract filename from URL
-        from media_toolkit.utils import download_file
         _, original_file_name = download_file(url)
         self.file_name = original_file_name
         
@@ -247,7 +247,8 @@ class MediaFile(UniversalFile):
         # determine content type
         if not hasattr(self, 'content_type') or self.content_type is None:
             from media_toolkit.core.content_detectors.puremagic_content_detector import PureMagicContentDetector
-            self.content_type = PureMagicContentDetector.detect_from_universal_file(self)
+            media_class_name, content_type, file_extension = PureMagicContentDetector.detect_from_universal_file(self)
+            self.content_type = content_type
 
         # Extract filename from path or temp file (always do this for metadata)
         if self.path is not None:
@@ -255,6 +256,13 @@ class MediaFile(UniversalFile):
         elif hasattr(self._content_buffer, "name") and self._content_buffer.name is not None:
             self.file_name = os.path.basename(self._content_buffer.name)
 
+        # Apply defaults if not set
+        if self.file_name is None:
+            self.file_name = "file"
+        
+        if self.content_type is None:
+            self.content_type = "application/octet-stream"
+        
     @property
     def extension(self) -> Optional[str]:
         """
@@ -263,12 +271,11 @@ class MediaFile(UniversalFile):
         Returns:
             File extension without dot, or None if undetermined
         """
-        # Extract from filename
-        if self.file_name and "." in self.file_name:
-            return self.file_name.rsplit(".", 1)[-1].lower()
-
         if self.content_type and "/" in self.content_type:
             return self.content_type.split("/")[-1].lower()
+
+        if self.file_name and "." in self.file_name:
+            return self.file_name.rsplit(".", 1)[-1].lower()
 
         return None
 

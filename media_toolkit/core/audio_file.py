@@ -25,7 +25,6 @@ class AudioFile(MediaFile):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.content_type = "audio/wav"  # Default audio type
         self._sample_rate = None  # Audio sample rate cache
         self._channels = None  # Audio channel count cache
         self._duration = None  # Audio duration cache
@@ -143,10 +142,15 @@ class AudioFile(MediaFile):
                 self._channels = 1 if audio.ndim == 1 else audio.shape[1]
                 self._duration = len(audio) / sample_rate
                         
-            except Exception as e:
-                # Fallback to default audio type if both content detection and soundfile fail
-                print(f"Could not extract audio metadata: {e}. Using default audio/wav content type.")
-                self.content_type = "audio/wav"
+            except Exception:
+                pass
+        
+        if self.content_type is None:
+            print("No content type given or detection failed. Defaulting to audio/wav")
+            self.content_type = "audio/wav"
+        
+        if self.file_name == "file":
+            self.file_name = "audiofile"
 
     @property
     def sample_rate(self) -> Optional[int]:

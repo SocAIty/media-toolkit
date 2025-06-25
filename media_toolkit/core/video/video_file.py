@@ -35,7 +35,6 @@ class VideoFile(MediaFile):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.content_type = "video/mp4"
         self.frame_count = None
         self.frame_rate = None
         self.width = None
@@ -73,7 +72,10 @@ class VideoFile(MediaFile):
         super(MediaFile, self).from_file(temp_vid_file_path)
         self._file_info()
         # remove tempfile
-        os.remove(temp_vid_file_path)
+        try:
+            os.remove(temp_vid_file_path)
+        except Exception:
+            pass
 
         return self
 
@@ -249,9 +251,8 @@ class VideoFile(MediaFile):
             saved_to_temporary_file = True
 
         try:
-            info = mediainfo(path)
-
             # Extract basic video information
+            info = mediainfo(path)
             self.frame_count = info_to_number(info, 'nb_frames', cast=int)
             self.duration = info_to_number(info, 'duration')
             self.width = info_to_number(info, 'width', cast=int)
@@ -279,6 +280,12 @@ class VideoFile(MediaFile):
                 os.remove(path)
             except Exception:
                 pass
+
+        if self.content_type is None:
+            self.content_type = "video/mp4"
+
+        if self.file_name == "file":
+            self.file_name = "videofile"
 
     @requires('vidgear')
     def to_image_stream(self):

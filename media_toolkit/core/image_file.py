@@ -25,7 +25,6 @@ class ImageFile(MediaFile):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.content_type = "image/jpeg"  # Default image type
         self._channels = None  # Image channel count cache
         self._image_format = None  # Detected image format cache
 
@@ -46,7 +45,7 @@ class ImageFile(MediaFile):
 
         # Auto-detect image type if not specified
         if img_type is None:
-            if "image/" not in self.content_type:
+            if self.content_type is None or "image/" not in self.content_type:
                 img_type, self._channels = self.detect_image_type_and_channels(np_array, default_image_type_return='png')
             else:
                 img_type = self.content_type.split("/")[1]
@@ -127,11 +126,16 @@ class ImageFile(MediaFile):
                     self._channels = channels
                     self._image_format = img_type
                     
-            except Exception as e:
-                print(f"Could not extract image metadata: {e}")
-                # Fallback to default image type if both content detection and cv2 fail
-                self.content_type = "image/jpeg"
+            except Exception:
+                pass
 
+        if self.content_type is None:
+            print("No content type given. Defaulting to image/jpeg")
+            self.content_type = "image/jpeg"
+
+        if self.file_name == "file":
+            self.file_name = "imagefile"
+        
     @requires('cv2', 'numpy')
     def detect_image_type_and_channels(self, image, default_image_type_return: str = "png") -> Tuple[str, int]:
         """
