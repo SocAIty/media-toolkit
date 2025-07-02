@@ -3,6 +3,7 @@ Utility functions for data type detection and validation.
 Extracted from the previous media_type_guesser for reuse across the codebase.
 """
 import os
+import re
 from urllib.parse import urlparse
 
 
@@ -70,3 +71,28 @@ def extract_extension(filename: str) -> str:
     if '.' in filename:
         return filename.rsplit('.', 1)[-1].lower()
     return None
+
+
+def is_likely_base64(s: str) -> bool:
+    """Check if string is likely a base64 encoded string. It does not check if the base64 is valid and does not try to decode it."""
+    if not isinstance(s, str):
+        return False
+
+    # Strip whitespace for accurate checking
+    s = s.strip()
+    
+    # Base64 length must be a multiple of 4
+    if len(s) % 4 != 0:
+        return False
+
+    # Match allowed characters and optional padding
+    base64_regex = re.compile(r'^[A-Za-z0-9+/]+={0,2}$')
+    if not base64_regex.match(s):
+        return False
+
+    # Padding rules: if padding is present, it must be at the end
+    if '=' in s:
+        if s.count('=') > 2 or not s.endswith('=' * s.count('=')):
+            return False
+
+    return True

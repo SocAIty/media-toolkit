@@ -32,7 +32,6 @@ def _resolve_media_class(class_name: str) -> Type[IMediaFile]:
     return class_map.get(class_name, MediaFile)
 
 
-
 def _interpret_type_hint(type_hint) -> Optional[str]:
     """
     Convert type_hint to media class name.
@@ -227,12 +226,7 @@ def media_from_any(
 
     # Load data into UniversalFile first
     universal = UniversalFile(use_temp_file, temp_dir)
-    
-    try:
-        universal.from_any(data, allow_reads_from_disk=allow_reads_from_disk)
-    except Exception as e:
-        # If loading fails, return None or raise
-        raise ValueError(f"Could not load data: {e}")
+    universal.from_any(data, allow_reads_from_disk=allow_reads_from_disk)
 
     # Determine target class using type hint first, then content detection
     target_class_name = None
@@ -256,10 +250,12 @@ def media_from_any(
         instance.from_bytes(universal.to_bytes())
         return instance
     except Exception:
-        # Fallback to MediaFile if target class fails
-        fallback = MediaFile(use_temp_file=use_temp_file, temp_dir=temp_dir)
-        fallback.from_bytes(universal.to_bytes())
-        return fallback
+        pass
+        
+    # Fallback to MediaFile if target class fails. Will throw an error if the file is not a valid media file.
+    fallback = MediaFile(use_temp_file=use_temp_file, temp_dir=temp_dir)
+    fallback.from_bytes(universal.to_bytes())
+    return fallback
 
 
 # Legacy compatibility functions

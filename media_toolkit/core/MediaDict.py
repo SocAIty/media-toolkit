@@ -14,6 +14,8 @@ class MediaDict(IMediaFile, Generic[T]):
     """
     A flexible media file dictionary that handles multiple file types
     and sources with configurable loading behaviors.
+    It will try to convert all values to a IMediaFile object.
+    If it can't convert a value to media file it will be stored as is.
 
     Supports:
     - Multiple MediaFile types as dictionary values
@@ -45,7 +47,12 @@ class MediaDict(IMediaFile, Generic[T]):
         self.temp_dir = temp_dir
         self.download_files = download_files
         self.read_system_files = read_system_files
-        self._media_files: Dict[str, Union[str, T, MediaList[T]]] = {}
+        self._all_items: Dict[str, Union[str, T, MediaList[T]]] = {}
+        
+        # Category sets for efficient file type lookup
+        self._url_files: set[str] = set()
+        self._non_processable_files: set[str] = set()
+        self._media_files: set[str] = set()
 
         if files:
             self.update(files)
@@ -57,55 +64,91 @@ class MediaDict(IMediaFile, Generic[T]):
             return True
         
         return file is None or (hasattr(file, '__len__') and len(file) == 0)
-            
+
     def _process_file(
             self,
+            key: str,
             file: Union[str, T, MediaList[T], 'MediaDict[T]']
     ) -> Union[str, T, MediaList[T], 'MediaDict[T]']:
         """
-        Process a single file based on configuration.
+        Process a single file and automatically categorize it.
 
         Args:
+            key: The key for this file in the dictionary
             file: File to process (URL, path, MediaFile, MediaList)
         Returns:
             Processed file (MediaFile, MediaList, or original str)
         """
+        # Remove from all sets first to avoid duplicates
+        self._remove_from_all_sets(key)
+        
         if isinstance(file, (IMediaFile, MediaList, MediaDict)):
+            self._media_files.add(key)
             return file
 
         # check if is empty
         if MediaDict._is_empty_file(file):
+            self._non_processable_files.add(key)
             return file
 
         # perform conversion
         if isinstance(file, str):
             if is_url(file):
                 if not self.download_files:
+                    self._url_files.add(key)
                     return file
-                return media_from_any(file, allow_reads_from_disk=self.read_system_files)
+                try:
+                    processed_file = media_from_any(file, allow_reads_from_disk=self.read_system_files)
+                    self._media_files.add(key)
+                    return processed_file
+                except Exception:
+                    self._non_processable_files.add(key)
+                    return file
 
         if is_file_model_dict(file):
-            return media_from_FileModel(file, allow_reads_from_disk=self.read_system_files)
+            try:
+                processed_file = media_from_FileModel(file, allow_reads_from_disk=self.read_system_files)
+                self._media_files.add(key)
+                return processed_file
+            except Exception:
+                self._non_processable_files.add(key)
+                return file
 
         if isinstance(file, list):
-            return MediaList[T](
+            media_list = MediaList[T](
                 files=file,
                 download_files=self.download_files,
                 read_system_files=self.read_system_files,
                 use_temp_file=self.use_temp_file,
                 temp_dir=self.temp_dir
             )
+            self._media_files.add(key)
+            return media_list
 
         if isinstance(file, dict):
-            return MediaDict[T](
+            media_dict = MediaDict[T](
                 files=file,
                 download_files=self.download_files,
                 read_system_files=self.read_system_files,
                 use_temp_file=self.use_temp_file,
                 temp_dir=self.temp_dir
             )
+            self._media_files.add(key)
+            return media_dict
 
-        return media_from_any(file, use_temp_file=self.use_temp_file, temp_dir=self.temp_dir)
+        try:
+            processed_file = media_from_any(file, use_temp_file=self.use_temp_file, temp_dir=self.temp_dir)
+            self._media_files.add(key)
+            return processed_file
+        except Exception:
+            self._non_processable_files.add(key)
+            return file
+
+    def _remove_from_all_sets(self, key: str):
+        """Remove key from all category sets."""
+        self._media_files.discard(key)
+        self._url_files.discard(key)
+        self._non_processable_files.discard(key)
 
     def from_any(
             self,
@@ -141,16 +184,14 @@ class MediaDict(IMediaFile, Generic[T]):
         if ignore_all_potential_errors:
             return self
 
+        # Use the media_files set for efficient lookup
         processable_files = {
-            key: file for key, file in self._media_files.items()
-            if isinstance(file, (IMediaFile, MediaList))
+            key: self._all_items[key] for key in self._media_files
         }
 
-        if len(processable_files) != len(self._media_files):
-            not_processable_file_names = [
-                str(key) for key, file in self._media_files.items()
-                if file not in processable_files.values()
-            ]
+        non_processable_count = len(self._non_processable_files) + len(self._url_files)
+        if non_processable_count > 0:
+            not_processable_file_names = list(self._non_processable_files | self._url_files)
             message = (
                 f"Files not processed: {not_processable_file_names}. "
                 f"Check configuration (download_files={self.download_files}, "
@@ -166,6 +207,22 @@ class MediaDict(IMediaFile, Generic[T]):
 
         return self
 
+    def get_non_file_params(self, include_urls: bool = True) -> dict:
+        """
+        Get all non-processed files.
+        If include_urls is True, it will include URLs that are not processed.
+        
+        Args:
+            include_urls: Whether to include URL files in the result
+        Returns:
+            Dictionary of non-processable files and optionally URLs
+        """
+        result_keys = self._non_processable_files.copy()
+        if include_urls:
+            result_keys.update(self._url_files)
+            
+        return {key: self._all_items[key] for key in result_keys}
+
     def _shallow_copy_with_settings(self, data: dict | None = None) -> 'MediaDict[T]':
         """
         Creates a new MediaDict with the same settings but shallow copies the media files dictionary.
@@ -175,7 +232,14 @@ class MediaDict(IMediaFile, Generic[T]):
             file_name=self.file_name, download_files=self.download_files,
             read_system_files=self.read_system_files, use_temp_file=self.use_temp_file, temp_dir=self.temp_dir
         )
-        md._media_files = data
+        if data is None:
+            return md
+        
+        md._all_items = data.copy()
+        md._media_files = self._media_files.copy()
+        md._url_files = self._url_files.copy()
+        md._non_processable_files = self._non_processable_files.copy()
+
         return md
 
     def get_url_files(self) -> Union['MediaDict[T]', dict]:
@@ -188,10 +252,8 @@ class MediaDict(IMediaFile, Generic[T]):
         if self.download_files:
             return {}
 
-        return self._shallow_copy_with_settings({
-            key: file for key, file in self._media_files.items()
-            if isinstance(file, str) and MediaFile._is_url(file)
-        })
+        url_files = {key: self._all_items[key] for key in self._url_files}
+        return self._shallow_copy_with_settings(url_files)
 
     def get_file_path_files(self) -> Union['MediaDict[T]', dict]:
         """
@@ -202,70 +264,69 @@ class MediaDict(IMediaFile, Generic[T]):
         """
         if self.read_system_files:
             return {}
-        return self._shallow_copy_with_settings({
-            key: file for key, file in self._media_files.items()
-            if isinstance(file, str) and MediaFile._is_valid_file_path(file)
-        })
+            
+        # Get non-processable files that are valid file paths
+        path_files = {
+            key: self._all_items[key] for key in self._non_processable_files
+            if isinstance(self._all_items[key], str) and MediaFile._is_valid_file_path(self._all_items[key])
+        }
+        return self._shallow_copy_with_settings(path_files)
 
     def to_base64(self) -> Dict[str, str]:
         """Convert all processable files to base64."""
         return {
-            key: file.to_base64()
-            for key, file in self.get_processable_files(raise_exception=False).items()
+            key: self._all_items[key].to_base64()
+            for key in self._media_files
         }
 
     def to_bytes_io(self) -> Dict[str, io.BytesIO]:
         """Convert all processable files to BytesIO."""
         return {
-            key: file.to_bytes_io()
-            for key, file in self.get_processable_files(raise_exception=False).items()
+            key: self._all_items[key].to_bytes_io()
+            for key in self._media_files
         }
 
     def file_size(self, unit: str = "bytes") -> float:
         """Calculate total file size."""
         return sum(
-            file.file_size(unit)
-            for file in self.get_processable_files(raise_exception=False).values()
+            self._all_items[key].file_size(unit)
+            for key in self._media_files
         )
 
     def to_json(self) -> Dict[str, Any]:
         """Convert files to JSON representation."""
-        files = self.get_processable_files(ignore_all_potential_errors=True)
         return {
-            key: (file.to_json() if isinstance(file, (IMediaFile, MediaList)) else file)
-            for key, file in files.items()
+            key: (self._all_items[key].to_json() if key in self._media_files else self._all_items[key])
+            for key in self._all_items
         }
 
     def to_bytes(self) -> Dict[str, bytes]:
         """Convert all processable files to bytes."""
         return {
-            key: file.to_bytes()
-            for key, file in self.get_processable_files(raise_exception=False).items()
+            key: self._all_items[key].to_bytes()
+            for key in self._media_files
         }
 
     def to_httpx_send_able_tuple(self) -> List[tuple] | dict:
         """
         Convert files to httpx-send-able format.
 
-        Args:
-            param_name: Optional parameter name for API endpoint
         Returns:
-            List of tuples  for httpx file transmission
+            List of tuples for httpx file transmission
         """
-        files = self.get_processable_files(raise_exception=False, silent=True)
-
         ret = []
-        for k, file in files.items():
+        for key in self._media_files:
+            file = self._all_items[key]
             if isinstance(file, MediaList):
-                ret.extend(file.to_httpx_sendable_tuple(k))
+                ret.extend(file.to_httpx_sendable_tuple(key))
             elif isinstance(file, MediaDict):
                 fls = file.to_httpx_sendable_tuple()
                 if isinstance(fls, dict):
-                    ret.append((k, fls))
+                    ret.append((key, fls))
                 else:
                     ret.extend(fls)
             else:
-                ret.append((k, file.to_httpx_send_able_tuple()))
+                ret.append((key, file.to_httpx_send_able_tuple()))
 
         if len(ret) == 1:
             return {ret[0][0]: ret[0][1]}
@@ -282,44 +343,45 @@ class MediaDict(IMediaFile, Generic[T]):
         directory = directory or os.path.curdir
         os.makedirs(directory, exist_ok=True)
 
-        for key, file in self.get_processable_files(raise_exception=False).items():
-            file.save(directory)
+        for key in self._media_files:
+            self._all_items[key].save(directory)
 
     def __getitem__(self, key: str):
         """Allow dictionary-style access."""
-        return self._media_files[key]
+        return self._all_items[key]
 
     def __setitem__(self, key: str, value: Union[str, T, MediaList[T]]):
         """Allow dictionary-style assignment with processing."""
-        self._media_files[key] = self._process_file(value)
+        self._all_items[key] = self._process_file(key, value)
 
     def __delitem__(self, key: str):
         """Allow dictionary-style deletion."""
-        del self._media_files[key]
+        del self._all_items[key]
+        self._remove_from_all_sets(key)
 
     def __iter__(self):
         """Make the class iterable."""
-        return iter(self._media_files)
+        return iter(self._all_items)
 
     def __len__(self):
         """Return the number of files in the dictionary."""
-        return len(self._media_files)
+        return len(self._all_items)
 
     def __contains__(self, key: str):
         """Check if a key exists in the dictionary."""
-        return key in self._media_files
+        return key in self._all_items
 
     def keys(self):
         """Return dictionary keys."""
-        return self._media_files.keys()
+        return self._all_items.keys()
 
     def values(self):
         """Return dictionary values."""
-        return self._media_files.values()
+        return self._all_items.values()
 
     def items(self):
         """Return dictionary items."""
-        return self._media_files.items()
+        return self._all_items.items()
 
     def update(self, files: Union['MediaDict[T]', Dict[str, Union[str, T, MediaList[T]]]]):
         """
@@ -335,7 +397,7 @@ class MediaDict(IMediaFile, Generic[T]):
             files = {str(uuid.uuid4()): files}
 
         for key, file in files.items():
-            self[key] = self._process_file(file)
+            self._all_items[key] = self._process_file(key, file)
 
     def __sizeof__(self):
         """Returns the memory size of the instance + actual file/buffer size."""
@@ -346,5 +408,5 @@ class MediaDict(IMediaFile, Generic[T]):
         """Convert MediaDict to a standard dictionary."""
         return {
             key: (file.to_dict() if isinstance(file, MediaDict) else file)
-            for key, file in self._media_files.items()
+            for key, file in self._all_items.items()
         }

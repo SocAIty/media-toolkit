@@ -8,7 +8,7 @@ from media_toolkit.core.IMediaFile import IMediaFile
 from media_toolkit.core.file_content_buffer import FileContentBuffer
 from media_toolkit.utils.dependency_requirements import requires_numpy
 from media_toolkit.utils.download_helper import download_file
-from media_toolkit.utils.data_type_utils import is_valid_file_path, is_url, is_starlette_upload_file
+from media_toolkit.utils.data_type_utils import is_valid_file_path, is_url, is_starlette_upload_file, is_likely_base64
 
 try:
     import numpy as np
@@ -68,19 +68,16 @@ class UniversalFile(IMediaFile):
             elif isinstance(data, str):
                 if is_valid_file_path(data):
                     if not allow_reads_from_disk:
-                        print(f"Reads from disk disabled. Skipping file {data}")
-                        return None
+                        raise ValueError(f"Reads from disk disabled {data}.")
                     else:
                         self.from_file(data)
                 elif is_url(data):
                     self.from_url(data)
+                elif is_likely_base64(data):
+                    self.from_base64(data)
                 else:
-                    # Try base64 decoding
-                    try:
-                        self.from_base64(data)
-                    except Exception as e:
-                        print(f"Could not parse as file path, URL, or base64: {data}. Error: {e}")
-                        return None
+                    raise ValueError(f"Could not parse as file path, URL, or base64: {data}. Your string is likely not a valid file.")
+                   
             elif isinstance(data, bytes):
                 self.from_bytes(data)
             elif type(data).__name__ == 'ndarray' or hasattr(data, '__array__') or (hasattr(data, 'dtype') and hasattr(data, 'shape')):
@@ -89,12 +86,9 @@ class UniversalFile(IMediaFile):
             elif is_starlette_upload_file(data):
                 self.from_starlette_upload_file(data)
             else:
-                print(f"Unsupported data type: {type(data)}")
-                return None
-                
+                raise ValueError(f"Unsupported data type: {type(data)}")
         except Exception as e:
-            print(f"Error in from_any with data type {type(data)}: {e}")
-            return None
+            raise ValueError(f"MediaFile.from_any failed: type {type(data)}: {e}")
 
         return self
 
