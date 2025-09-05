@@ -1,10 +1,12 @@
 import tempfile
-from typing import Union
 import tqdm
+from typing import Union
+from fractions import Fraction
 
 from media_toolkit.utils.dependency_requirements import requires
 import subprocess
 import os
+
 
 try:
     from pydub import AudioSegment
@@ -18,7 +20,7 @@ except ImportError:
     pass
 
 try:
-    from vidgear.gears import WriteGear
+    import av
 except ImportError:
     pass
 
@@ -27,7 +29,7 @@ try:
 except ImportError:
     pass
 
-
+ 
 @requires('pydub', 'numpy')
 def add_audio_to_video_file(
         video_file: str,
@@ -94,7 +96,7 @@ def get_audio_sample_rate_from_file(file_path: str) -> int:
     return int(info['sample_rate'])
 
 
-@requires('vidgear', 'numpy', 'cv2')
+@requires('numpy', 'av', 'cv2')
 def video_from_image_generator(
         image_generator,
         save_path: str = None,
@@ -102,54 +104,79 @@ def video_from_image_generator(
         ffmpeg_params: dict = None
 ):
     """
-    Creates a video from an image generator. The image generator should yield images as numpy arrays or filepaths.
+    Creates a video from an image generator using PyAV.
+    The image generator should yield images as numpy arrays (BGR) or filepaths.
     Returns a path to a tempfile if save_path is None, otherwise saves the video to the save_path.
-        Don't forget to delete the tempfile later.
-    :param image_generator: A generator or iterable that yields images as numpy arrays (BGR) or filepaths.
-    :param save_path: The path to save the video to. If None, a tempfile is created.
-    :param frame_rate: The frame rate of the video.
-    :param ffmpeg_params: Additional ffmpeg parameters. In form {"-vcodec": "h264", "-f": "mp4", "-pix_fmt": "yuv420p"}
     """
-    # if save_path is None, return a VideoFile object
+    # Create temp file if none provided
     if save_path is None:
         tempf = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         save_path = tempf.name
 
-    # make a nice progress bar
+    # Wrap in tqdm if possible
     if hasattr(image_generator, "__len__"):
         image_generator = tqdm.tqdm(enumerate(image_generator), total=len(image_generator))
     else:
         image_generator = tqdm.tqdm(enumerate(image_generator))
 
-    if ffmpeg_params is None:
-        ffmpeg_params = {
-            "-vcodec": "h264",
-            "-f": "mp4",
-            "-pix_fmt": "yuv420p"
-        }
+    # Default ffmpeg parameters
+    ffmpeg_params = ffmpeg_params or {}
+    # Pick codec and pix_fmt from params (fall back to defaults)
+    codec = ffmpeg_params.get("-vcodec", "libx264")
+    pix_fmt = ffmpeg_params.get("-pix_fmt", "yuv420p")
 
-    # Write the video
-    output_params = {"-input_framerate": frame_rate}
-    output_params.update(ffmpeg_params)  # ffmpeg params
-    writer = WriteGear(output=save_path, compression_mode=True, logging=True, **output_params)
+    container = None
+    stream = None
+    width, height = None, None
 
-    for i, img in image_generator:
-        try:
-            if isinstance(img, str):
-                img = cv2.imread(img)
-            if not isinstance(img, np.ndarray):
-                raise ValueError("The image generator should yield images as numpy arrays or filepaths.")
-            writer.write(img, rgb_mode=False)  # expecting BGR
-        except Exception as e:
-            file_name = img if isinstance(img, str) else f"image_{i}"
-            print(f"Error reading {file_name}: {e}. Skipping frame {i}")
-            continue
-    # Safely close the writer
     try:
-        writer.close()
+        # Open output container
+        container = av.open(save_path, mode="w")
+
+        for i, img in image_generator:
+            try:
+                # Load from path if needed
+                if isinstance(img, str):
+                    img = cv2.imread(img)
+                if not isinstance(img, np.ndarray):
+                    raise ValueError("Image generator must yield numpy arrays or file paths.")
+
+                if width is None or height is None:
+                    height, width = img.shape[:2]
+
+                # Add video stream once we know frame size
+                # Ensure the encoding stream exists (attempt each iteration until it succeeds)
+                if stream is None and width is not None and height is not None:
+                    stream = container.add_stream(codec, rate=Fraction(frame_rate).limit_denominator())
+                    # Add video stream once we know frame size
+                    stream.width = width
+                    stream.height = height
+                    stream.pix_fmt = pix_fmt
+                
+                if stream is None:
+                    raise RuntimeError("Video stream not initialized; skipping frame until stream is created.")
+
+                # Convert BGR → RGB (PyAV expects RGB24 for ndarray import)
+                frame = av.VideoFrame.from_ndarray(img[:, :, ::-1], format="rgb24")
+
+                # Encode and mux
+                for packet in stream.encode(frame):
+                    container.mux(packet)
+
+            except Exception as e:
+                file_name = img if isinstance(img, str) else f"image_{i}"
+                print(f"Error reading {file_name}: {e}. Skipping frame {i}")
+                continue
+
+        # Flush encoder
+        if stream is not None:
+            for packet in stream.encode():
+                container.mux(packet)
+
     except Exception as e:
-        print(f"Error closing the video writer. {e}")
+        print(f"Error writing video: {e}")
+    finally:
+        if container is not None:
+            container.close()
 
     return save_path
-
-

@@ -28,6 +28,7 @@ Work with native python libs like BytesIO.
 
 Only use the file types you need, no unnecessary dependencies.
 
+
 ## Installation
 
 You can install the package with PIP, or clone the repository. 
@@ -148,16 +149,16 @@ Both `MediaList` and `MediaDict` support:
 
 ### Working with VideoFiles
 
-The VideoFiles wrap the famous [vidgear](https://abhitronix.github.io/vidgear/latest/) package as well as [pydub](https://github.com/jiaaro/pydub).
-VideoFiles support extra methods like audio extraction, combining video and audio.
-Vidgear is a powerful video processing library that supports many video formats and codecs and is known for fast video processing.
+The VideoFiles use [PyAV](https://pyav.org/docs/stable/) together with [pydub](https://github.com/jiaaro/pydub).
+VideoFiles support extra methods like audio extraction and combining video and audio.
+PyAV is a powerful Pythonic binding for FFmpeg libraries that supports many video formats and codecs and is known for robust, efficient processing.
 
 ```python
 # load the video file
 vf = VideoFile().from_file("test_files/test_vid_1.mp4")
 
 # extract audio_file
-vf.extract_audio("extracted_audio.mp3")
+yf = vf.extract_audio("extracted_audio.mp3")
 
 # stream the video
 for img, audio in vf.to_video_stream(include_audio=True):
