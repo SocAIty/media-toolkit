@@ -24,8 +24,9 @@ class PureMagicContentDetector:
         'bmp': 'ImageFile',
         'tiff': 'ImageFile',
         'tif': 'ImageFile',
+        'jfif': 'ImageFile',
 
-        # Image formats - limited support (use MediaFile). 
+        # Image formats - limited support (use MediaFile).
         # Consider install of pillow
         'ico': 'MediaFile',
         'webp': 'MediaFile',  # Not fully supported in ImageFile yet
@@ -187,6 +188,7 @@ class PureMagicContentDetector:
             'avif': 'image/avif',
             'heic': 'image/heic',
             'heif': 'image/heif',
+            'jfif': 'image/jpeg',
             
             # Audio
             'wav': 'audio/wav',
