@@ -76,6 +76,7 @@ def _interpret_type_hint(type_hint) -> Optional[str]:
             'jpg': 'ImageFile', 'jpeg': 'ImageFile', 'png': 'ImageFile',
             'gif': 'ImageFile', 'bmp': 'ImageFile', 'tiff': 'ImageFile',
             'tif': 'ImageFile', 'ico': 'ImageFile', 'svg': 'ImageFile',
+            'jfif': 'ImageFile',
             # Limited support
             'webp': 'MediaFile',
             'avif': 'MediaFile',
