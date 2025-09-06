@@ -310,6 +310,7 @@ class VideoFile(MediaFile):
         container = None
         audio = None
         stream_video = None
+        frame_count = 0  # Initialize frame_count before any potential exceptions
 
         try:
             container = av.open(temp_video_file_path)
@@ -318,6 +319,7 @@ class VideoFile(MediaFile):
                 if stream.type == 'video' and stream_video is None:
                     stream_video = stream
             # We will extract audio separately using pydub for simplicity
+            audio_per_frame_duration = 0  # Initialize to prevent UnboundLocalError
             if include_audio:
                 try:
                     audio = AudioSegment.from_file(temp_video_file_path)
@@ -333,7 +335,6 @@ class VideoFile(MediaFile):
                     include_audio = False
                     print("Could not extract audio_file from video file. Audio will not be included in the video stream.")
 
-            frame_count = 0
             audio_shape = None
 
             for frame in container.decode(video=0):
@@ -351,7 +352,7 @@ class VideoFile(MediaFile):
                         audio_shape = audio_data.shape
 
                     if audio_data is None:
-                        audio_data = np.zeros(audio_shape)
+                        audio_data = np.zeros(audio_shape if audio_shape is not None else (0,))
 
                     if audio_shape is not None:
                         if len(audio_data) < audio_shape[0]:

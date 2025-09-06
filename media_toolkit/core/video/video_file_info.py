@@ -6,12 +6,12 @@ from fractions import Fraction
 @dataclass
 class VideoInfo:
     """Video metadata container with validation and derived properties."""
-    frame_rate: Optional[float] = None
-    frame_count: Optional[int] = None
-    duration: Optional[float] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    audio_sample_rate: Optional[int] = None
+    frame_rate: float = None
+    frame_count: int = None
+    duration: float = None
+    width: int = None
+    height: int = None
+    audio_sample_rate: int = None
 
     def __post_init__(self):
         self._derive_missing()

@@ -1,6 +1,5 @@
 import tempfile
 import tqdm
-from typing import Union
 from fractions import Fraction
 
 from media_toolkit.utils.dependency_requirements import requires
@@ -33,7 +32,7 @@ except ImportError:
 @requires('pydub', 'numpy')
 def add_audio_to_video_file(
         video_file: str,
-        audio_file: Union[str, list],
+        audio_file: str,
         save_path: str = None
 ):
     """
@@ -172,6 +171,8 @@ def video_from_image_generator(
         if stream is not None:
             for packet in stream.encode():
                 container.mux(packet)
+        else:
+            print("Warning: No valid frames were processed. Video file may be empty or corrupted.")
 
     except Exception as e:
         print(f"Error writing video: {e}")
