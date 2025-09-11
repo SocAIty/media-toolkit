@@ -8,7 +8,10 @@ from urllib.parse import urlparse
 
 
 def is_valid_file_path(path: str) -> bool:
-    """Efficiently check if string is a valid file path."""
+    """
+    Efficiently check if string is a valid file path.
+    Returns true if is a valid path and the file exists.
+    """
     try:
         return isinstance(path, str) and os.path.isfile(path)
     except (OSError, ValueError, TypeError):

@@ -114,9 +114,9 @@ def video_from_image_generator(
 
     # Wrap in tqdm if possible
     if hasattr(image_generator, "__len__"):
-        image_generator = tqdm.tqdm(enumerate(image_generator), total=len(image_generator))
+        image_generator = tqdm.tqdm(image_generator, total=len(image_generator))
     else:
-        image_generator = tqdm.tqdm(enumerate(image_generator))
+        image_generator = tqdm.tqdm(image_generator)
 
     # Default ffmpeg parameters
     ffmpeg_params = ffmpeg_params or {}
@@ -132,13 +132,19 @@ def video_from_image_generator(
         # Open output container
         container = av.open(save_path, mode="w")
 
-        for i, img in image_generator:
+        for i, img in enumerate(image_generator):
             try:
                 # Load from path if needed
                 if isinstance(img, str):
                     img = cv2.imread(img)
+
+                try:
+                    img = np.array(img)
+                except Exception as e:
+                    raise ValueError(f"Image generator must yield numpy arrays, file paths or ImageFile objects. Error: {e}")
+
                 if not isinstance(img, np.ndarray):
-                    raise ValueError("Image generator must yield numpy arrays or file paths.")
+                    raise ValueError("Image generator must yield numpy arrays, file paths or ImageFile objects.")
 
                 if width is None or height is None:
                     height, width = img.shape[:2]

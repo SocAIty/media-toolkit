@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 import io
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Generic, TypeVar
+# Define a type variable for media files
+T = TypeVar("T", bound="IMediaFile")
 
 
 class IMediaFile(ABC):
@@ -85,3 +87,71 @@ class IMediaFile(ABC):
         """Get the size of the file in bytes."""
         pass
 
+
+class IMediaContainer(IMediaFile, Generic[T], ABC):
+    """
+    Abstract base interface defining the core contract for media container handling
+    in the Media Toolkit ecosystem.
+    """
+    @abstractmethod
+    def get_processable_files(self):
+        """
+        Get all processable files from the container.
+        """
+        pass
+
+    @abstractmethod
+    def get_url_files(self):
+        """
+        Get all non processed files that are URLs from the container.
+        """
+        pass
+    
+    @abstractmethod
+    def get_file_path_files(self):
+        """
+        Get all non processed files that are file paths from the container.
+        """
+        pass
+
+    @abstractmethod
+    def get_non_file_params(self):
+        """
+        Get all non-file parameters from the container.
+        """
+        pass
+    
+    @abstractmethod
+    def to_httpx_send_able_tuple(self) -> List[tuple]:
+        """
+        Convert the container to httpx format.
+        """
+        pass
+    
+    @abstractmethod
+    def save(self, path: Optional[str] = None):
+        """
+        Save the container to specified path.
+        """
+        pass
+
+    @abstractmethod
+    def __len__(self):
+        """
+        Get the length of the container.
+        """
+        pass
+    
+    @abstractmethod
+    def __iter__(self):
+        """
+        Iterate over the container.
+        """
+        pass
+    
+    @abstractmethod
+    def __sizeof__(self):
+        """
+        Get the size of the container (including file sizes).
+        """
+        pass

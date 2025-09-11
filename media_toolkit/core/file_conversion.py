@@ -18,6 +18,7 @@ from media_toolkit.core.image_file import ImageFile
 from media_toolkit.core.audio_file import AudioFile
 from media_toolkit.core.video.video_file import VideoFile
 
+
 MediaFileType = Union[MediaFile, ImageFile, AudioFile, VideoFile]
 
 
@@ -61,7 +62,7 @@ def _interpret_type_hint(type_hint) -> Optional[str]:
         # Direct media type mapping
         type_mappings = {
             'image': 'ImageFile',
-            'audio': 'AudioFile', 
+            'audio': 'AudioFile',
             'video': 'VideoFile',
             'npy': 'MediaFile',
             'numpy': 'MediaFile',
@@ -149,7 +150,7 @@ def media_from_numpy(
         target_class = _resolve_media_class(detected_class_name)
         instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
         
-        # Try to create from numpy array 
+        # Try to create from numpy array
         if hasattr(instance, 'from_np_array'):
             return instance.from_np_array(np_array)
         else:
@@ -225,16 +226,16 @@ def media_from_any(
         instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
         return instance.from_dict(data)
 
-    # Load data into UniversalFile first
-    universal = UniversalFile(use_temp_file, temp_dir)
-    universal.from_any(data, allow_reads_from_disk=allow_reads_from_disk)
-
     # Determine target class using type hint first, then content detection
     target_class_name = None
     
     if type_hint:
         target_class_name = _interpret_type_hint(type_hint)
     
+    # Load data into UniversalFile first
+    universal = UniversalFile(use_temp_file, temp_dir)
+    universal.from_any(data, allow_reads_from_disk=allow_reads_from_disk)
+
     # If no valid hint, use magic content detection
     if not target_class_name:
         try:

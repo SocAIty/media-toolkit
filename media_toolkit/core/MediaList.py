@@ -1,14 +1,14 @@
 import io
 from typing import List, Union, Optional, Any, TypeVar, Generic
 from media_toolkit.core.media_file import MediaFile
-from media_toolkit.core.IMediaFile import IMediaFile
+from media_toolkit.core.IMediaFile import IMediaContainer, IMediaFile
 from media_toolkit.core.file_conversion import media_from_any, media_from_FileModel
 import os
 
 T = TypeVar('T', bound=IMediaFile)
 
 
-class MediaList(IMediaFile, Generic[T]):
+class MediaList(IMediaContainer, Generic[T]):
     """
     A flexible media file list that handles multiple file types and sources with configurable loading behaviors.
     It will try to convert all values to a IMediaFile object.
@@ -52,6 +52,7 @@ class MediaList(IMediaFile, Generic[T]):
         self._media_files: List[T] = []
         self._url_files: List[str] = []
         self._non_processable_files: List[Union[str, Any]] = []
+        self._media_containers: List[IMediaContainer] = []
 
         if files:
             self.extend(files)
@@ -72,6 +73,8 @@ class MediaList(IMediaFile, Generic[T]):
         """
         if isinstance(file, IMediaFile):
             self._media_files.append(file)
+            if isinstance(file, IMediaContainer):
+                self._media_containers.append(file)
             return file
 
         # check if is empty
@@ -122,10 +125,13 @@ class MediaList(IMediaFile, Generic[T]):
             return file
 
     def from_any(self, data: List[Union[str, T]], allow_reads_from_disk: bool = True) -> 'MediaList[T]':
+        if data is None:
+            return self
+        
         if isinstance(data, list):
             for d in data:
                 self._process_file(d)
-        elif isinstance(data, IMediaFile):
+        else:
             self._process_file(data)
         return self
 
@@ -134,7 +140,7 @@ class MediaList(IMediaFile, Generic[T]):
         ignore_all_potential_errors: bool = False,
         raise_exception: bool = True,
         silent: bool = False
-    ) -> List[T]:
+    ) -> 'MediaList[T]':
         """
         Validate that all files can be processed for batch operations. This depends on configuration.
         
@@ -147,9 +153,21 @@ class MediaList(IMediaFile, Generic[T]):
         """
         if ignore_all_potential_errors:
             return self._media_files.copy()
+        
+        processable_files = []
+        # Add non-container media files
+        for file in self._media_files:
+            if file not in self._media_containers:
+                processable_files.append(file)
+        
+        # Process containers separately
+        for container in self._media_containers:
+            nested_files = container.get_processable_files(raise_exception=False, silent=True)
+            if len(nested_files) > 0:
+                processable_files.extend(nested_files)
 
         non_processable_count = len(self._url_files) + len(self._non_processable_files)
-        if non_processable_count > 0:
+        if non_processable_count > 0 and (raise_exception or not silent):
             not_processable_files = self._url_files + self._non_processable_files
             message = f"Files not processed: {not_processable_files}. " \
                       f"Check configuration (download_files={self.download_files}, " \
@@ -159,7 +177,13 @@ class MediaList(IMediaFile, Generic[T]):
             if not silent:
                 print(message)
 
-        return self._media_files.copy()
+        return MediaList[T](
+            files=processable_files,
+            download_files=self.download_files,
+            read_system_files=self.read_system_files,
+            use_temp_file=self.use_temp_file,
+            temp_dir=self.temp_dir
+        )
 
     def get_url_files(self) -> List[str]:
         """Get all non processed files that are URLs from the list."""
@@ -168,7 +192,7 @@ class MediaList(IMediaFile, Generic[T]):
     def get_file_path_files(self) -> List[str]:
         """Get all non processed files that are file paths from the list."""
         return [
-            file for file in self._non_processable_files 
+            file for file in self._non_processable_files
             if isinstance(file, str) and MediaFile._is_valid_file_path(file)
         ]
 
@@ -176,16 +200,23 @@ class MediaList(IMediaFile, Generic[T]):
         """
         Get all non-processed files.
         If include_urls is True, it will include URLs that are not processed.
-        
+
         Args:
             include_urls: Whether to include URL files in the result
         Returns:
             List of non-processable files and optionally URLs
         """
-        result = self._non_processable_files.copy()
+        non_file_params = self._non_processable_files.copy()
         if include_urls:
-            result.extend(self._url_files)
-        return result
+            non_file_params.extend(self._url_files)
+
+        # Process containers
+        for container in self._media_containers:
+            nested_files = container.get_non_file_params(include_urls)
+            if len(nested_files) > 0:
+                non_file_params.extend(nested_files)
+      
+        return non_file_params
 
     def to_base64(self) -> List[str]:
         """Convert all files to base64."""
@@ -221,10 +252,16 @@ class MediaList(IMediaFile, Generic[T]):
         Returns:
             List of (filename, content, content_type) tuples or (param_name, (filename, content, content_type)) tuples
         """
-        if param_name:
-            return [(param_name, file.to_httpx_send_able_tuple()) for file in self._media_files]
+        tuples = []
+        # Process media files
+        for file in self._media_files:
+            file_tuple = file.to_httpx_send_able_tuple()
+            if param_name:
+                tuples.append((param_name, file_tuple))
+            else:
+                tuples.append(file_tuple)
 
-        return [file.to_httpx_send_able_tuple() for file in self._media_files]
+        return tuples
 
     def save(self, directory: Optional[str] = None):
         """
@@ -262,6 +299,8 @@ class MediaList(IMediaFile, Generic[T]):
         # Remove from appropriate category list
         if file_to_remove in self._media_files:
             self._media_files.remove(file_to_remove)
+            if file_to_remove in self._media_containers:
+                self._media_containers.remove(file_to_remove)
         elif file_to_remove in self._url_files:
             self._url_files.remove(file_to_remove)
         elif file_to_remove in self._non_processable_files:

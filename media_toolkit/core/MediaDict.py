@@ -1,7 +1,7 @@
 import io
 import uuid
 from typing import List, Union, Optional, Any, Dict, TypeVar, Generic
-from media_toolkit.core.IMediaFile import IMediaFile
+from media_toolkit.core.IMediaFile import IMediaFile, IMediaContainer
 from media_toolkit.core.media_file import MediaFile
 from media_toolkit.core.MediaList import MediaList
 from media_toolkit.core.file_conversion import media_from_any, media_from_FileModel
@@ -10,7 +10,7 @@ from media_toolkit.utils.data_type_utils import is_file_model_dict, is_url
 T = TypeVar('T', bound=IMediaFile)
 
 
-class MediaDict(IMediaFile, Generic[T]):
+class MediaDict(IMediaContainer, Generic[T]):
     """
     A flexible media file dictionary that handles multiple file types
     and sources with configurable loading behaviors.
@@ -24,7 +24,7 @@ class MediaDict(IMediaFile, Generic[T]):
     """
     def __init__(
             self,
-            files: Optional[Dict[str, Union[str, T, MediaList[T], 'MediaDict[T]']]] = None,
+            files: Optional[Dict[str, Union[str, T, IMediaContainer[T]]]] = None,
             download_files: bool = True,
             read_system_files: bool = True,
             file_name: str = "MediaDict",
@@ -52,7 +52,10 @@ class MediaDict(IMediaFile, Generic[T]):
         # Category sets for efficient file type lookup
         self._url_files: set[str] = set()
         self._non_processable_files: set[str] = set()
+        # note that media_files and media_containers are not distinct sets.
+        # Media files can be containers themselves.
         self._media_files: set[str] = set()
+        self._media_containers: set[str] = set()
 
         if files:
             self.update(files)
@@ -68,7 +71,7 @@ class MediaDict(IMediaFile, Generic[T]):
     def _process_file(
             self,
             key: str,
-            file: Union[str, T, MediaList[T], 'MediaDict[T]']
+            file: Union[str, T, IMediaContainer[T]]
     ) -> Union[str, T, MediaList[T], 'MediaDict[T]']:
         """
         Process a single file and automatically categorize it.
@@ -82,8 +85,10 @@ class MediaDict(IMediaFile, Generic[T]):
         # Remove from all sets first to avoid duplicates
         self._remove_from_all_sets(key)
         
-        if isinstance(file, (IMediaFile, MediaList, MediaDict)):
+        if isinstance(file, (IMediaFile, IMediaContainer)):
             self._media_files.add(key)
+            if isinstance(file, IMediaContainer):
+                self._media_containers.add(key)
             return file
 
         # check if is empty
@@ -123,6 +128,7 @@ class MediaDict(IMediaFile, Generic[T]):
                 temp_dir=self.temp_dir
             )
             self._media_files.add(key)
+            self._media_containers.add(key)
             return media_list
 
         if isinstance(file, dict):
@@ -134,6 +140,7 @@ class MediaDict(IMediaFile, Generic[T]):
                 temp_dir=self.temp_dir
             )
             self._media_files.add(key)
+            self._media_containers.add(key)
             return media_dict
 
         try:
@@ -149,6 +156,7 @@ class MediaDict(IMediaFile, Generic[T]):
         self._media_files.discard(key)
         self._url_files.discard(key)
         self._non_processable_files.discard(key)
+        self._media_containers.discard(key)
 
     def from_any(
             self,
@@ -185,12 +193,20 @@ class MediaDict(IMediaFile, Generic[T]):
             return self
 
         # Use the media_files set for efficient lookup
-        processable_files = {
-            key: self._all_items[key] for key in self._media_files
-        }
+        # In case of nested containers we need to get the processable files from the nested container
+        processable_files = {}
+        # Add non-container media files
+        for key in self._media_files - self._media_containers:
+            processable_files[key] = self._all_items[key]
+        
+        # Process containers separately
+        for key in self._media_containers:
+            nested_files = self._all_items[key].get_processable_files(raise_exception=False, silent=True)
+            if len(nested_files) > 0:
+                processable_files[key] = nested_files
 
         non_processable_count = len(self._non_processable_files) + len(self._url_files)
-        if non_processable_count > 0:
+        if non_processable_count > 0 and (raise_exception or not silent):
             not_processable_file_names = list(self._non_processable_files | self._url_files)
             message = (
                 f"Files not processed: {not_processable_file_names}. "
@@ -203,9 +219,7 @@ class MediaDict(IMediaFile, Generic[T]):
             if not silent:
                 print(message)
 
-            return self._shallow_copy_with_settings(processable_files)
-
-        return self
+        return self._shallow_copy_with_settings(processable_files)
 
     def get_non_file_params(self, include_urls: bool = True) -> dict:
         """
@@ -217,11 +231,19 @@ class MediaDict(IMediaFile, Generic[T]):
         Returns:
             Dictionary of non-processable files and optionally URLs
         """
-        result_keys = self._non_processable_files.copy()
+        non_file_keys = self._non_processable_files.copy()
         if include_urls:
-            result_keys.update(self._url_files)
-            
-        return {key: self._all_items[key] for key in result_keys}
+            non_file_keys.update(self._url_files)
+
+        non_file_params = {key: self._all_items[key] for key in non_file_keys}
+ 
+        # Process containers separately
+        for key in self._media_containers:
+            nested_files = self._all_items[key].get_non_file_params(include_urls)
+            if len(nested_files) > 0:
+                non_file_params[key] = nested_files
+        
+        return non_file_params
 
     def _shallow_copy_with_settings(self, data: dict | None = None) -> 'MediaDict[T]':
         """
@@ -235,10 +257,13 @@ class MediaDict(IMediaFile, Generic[T]):
         if data is None:
             return md
         
+        data_keys = data.keys()
+
         md._all_items = data.copy()
-        md._media_files = self._media_files.copy()
-        md._url_files = self._url_files.copy()
-        md._non_processable_files = self._non_processable_files.copy()
+        md._media_files = self._media_files.intersection(data_keys)
+        md._url_files = self._url_files.intersection(data_keys)
+        md._non_processable_files = self._non_processable_files.intersection(data_keys)
+        md._media_containers = self._media_containers.intersection(data_keys)
 
         return md
 
@@ -315,12 +340,18 @@ class MediaDict(IMediaFile, Generic[T]):
             List of tuples for httpx file transmission
         """
         ret = []
-        for key in self._media_files:
+        # Process non-container media files
+        for key in self._media_files - self._media_containers:
+            file = self._all_items[key]
+            ret.append((key, file.to_httpx_send_able_tuple()))
+        
+        # Process containers separately
+        for key in self._media_containers:
             file = self._all_items[key]
             if isinstance(file, MediaList):
-                ret.extend(file.to_httpx_sendable_tuple(key))
+                ret.extend(file.to_httpx_send_able_tuple(key))
             elif isinstance(file, MediaDict):
-                fls = file.to_httpx_sendable_tuple()
+                fls = file.to_httpx_send_able_tuple()
                 if isinstance(fls, dict):
                     ret.append((key, fls))
                 else:
