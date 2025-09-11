@@ -1,4 +1,4 @@
-from media_toolkit.core import MediaFile, ImageFile, VideoFile, AudioFile, MediaList, MediaDict
+from media_toolkit.core import MediaFile, ImageFile, VideoFile, AudioFile, MediaList, MediaDict, IMediaFile, IMediaContainer
 from media_toolkit.core.file_conversion import media_from_file, media_from_any, media_from_numpy, media_from_FileModel
 
 try:
@@ -13,6 +13,6 @@ except Exception:
     __version__ = "0.0.0"
 
 __all__ = [
-    "MediaFile", "ImageFile", "VideoFile", "AudioFile", "MediaList", "MediaDict",
+    "MediaFile", "ImageFile", "VideoFile", "AudioFile", "MediaList", "MediaDict", "IMediaFile", "IMediaContainer",
     "media_from_file", "media_from_any", "media_from_numpy", "media_from_FileModel"
 ]

@@ -74,8 +74,8 @@ def audio_array_to_audio_file(audio_array, sample_rate: int = 44100, save_path: 
     # remove faulty channels
     channels = 2 if audio_array.ndim == 2 else 1
     song = AudioSegment(
-        audio_array.tobytes(),
-        frame_rate=sample_rate,
+        data=audio_array.tobytes(),
+        frame_rate=sample_rate or 44100,
         sample_width=audio_array.dtype.itemsize,
         channels=channels
     )

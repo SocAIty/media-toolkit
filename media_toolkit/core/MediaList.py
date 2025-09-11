@@ -232,7 +232,7 @@ class MediaList(IMediaContainer, Generic[T]):
         """Convert files to JSON representation."""
         result = []
         # Add processed media files
-        result.extend([file.to_json() if isinstance(file, MediaFile) else file for file in self._media_files])
+        result.extend([file.to_json() for file in self._media_files])
         # Add non-processed files as-is
         result.extend(self._url_files)
         result.extend(self._non_processable_files)
