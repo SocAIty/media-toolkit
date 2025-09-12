@@ -200,49 +200,49 @@ class VideoFile(MediaFile):
         # Reset and pre-settings
         self._reset_buffer()
 
-        # new generator, to extract audio_file
         audio_frames = []
 
         def _frame_gen():
             for frame in video_audio_stream:
-                # check if is video and audio_file stream or only video stream
                 if isinstance(frame, tuple) and len(frame) == 2:
                     frame, audio_data = frame
-                    if audio_data is None:
-                        audio_data = np.zeros(0)
-                        print("Warning: Audio data is None. Adding silence in frame.")
+                    if audio_data is None or len(audio_data) == 0:
+                        # no audio data, add silence
+                        audio_data = np.zeros(0, dtype=np.int16)
                     audio_frames.append(audio_data)
                 yield frame
 
-        # allows tqdm to work with the generator
         video_gen_wrapper = _frame_gen()
         if hasattr(video_audio_stream, '__len__'):
             video_gen_wrapper = SimpleGeneratorWrapper(video_gen_wrapper, length=len(video_audio_stream))
 
-        # Create video
+        # Write video (no audio yet)
         temp_video_file_path = video_from_image_generator(video_gen_wrapper, frame_rate=frame_rate, save_path=None)
 
-        # Add audio_file
+        combined = temp_video_file_path
+        temp_audio_file = None
+
+        # Add audio if available
         if len(audio_frames) > 0:
             try:
-                temp_audio_file = audio_array_to_audio_file(audio_frames, sample_rate=audio_sample_rate)
+                # Flatten jagged list of arrays into a contiguous 1-D buffer
+                audio_np = np.concatenate(audio_frames) if isinstance(audio_frames[0], np.ndarray) else np.array(audio_frames)
+                temp_audio_file = audio_array_to_audio_file(audio_np, sample_rate=audio_sample_rate)
                 combined = add_audio_to_video_file(temp_video_file_path, temp_audio_file)
-                # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
-                super(MediaFile, self).from_file(combined)
-                self._file_info()
-                # cleanup
-                self._safe_remove(temp_audio_file)
-                self._safe_remove(temp_video_file_path)
-                self._safe_remove(combined)
-                return self
             except Exception as e:
-                print(f"Error adding audio_file to video. Returning video without audio. {e.__traceback__} ")
+                print(f"Error adding audio_file to video. Returning video without audio. Error: {str(e)} traceback: {e.__traceback__} ")
+                combined = temp_video_file_path
 
-        # if no audio_file was added
-        # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
-        super(MediaFile, self).from_file(temp_video_file_path)
-        self._file_info()
-        # rely on finally for cleanup
+        # Init self from the final file
+        super(MediaFile, self).from_file(combined)
+        self._file_info()  # ensures content_type, frame_count, duration, etc.
+
+        # Cleanup AFTER info extraction
+        if temp_audio_file:
+            self._safe_remove(temp_audio_file)
+        if combined != temp_video_file_path:
+            self._safe_remove(combined)
+        self._safe_remove(temp_video_file_path)
 
         return self
 
@@ -304,38 +304,31 @@ class VideoFile(MediaFile):
             raise ValueError("The video file is empty.")
 
         self._content_buffer.seek(0)
-        # because PyAV does not support reading from a BytesIO buffer directly, we need to save the buffer to a temporary file
         temp_video_file_path = self._to_temp_file()
 
         container = None
-        audio = None
-        stream_video = None
-        frame_count = 0  # Initialize frame_count before any potential exceptions
+        frame_count = 0
 
         try:
             container = av.open(temp_video_file_path)
 
-            for stream in container.streams:
-                if stream.type == 'video' and stream_video is None:
-                    stream_video = stream
-            # We will extract audio separately using pydub for simplicity
-            audio_per_frame_duration = 0  # Initialize to prevent UnboundLocalError
+            stream_video = next((s for s in container.streams if s.type == 'video'), None)
+
+            audio = None
+            audio_per_frame_samples = None
+            expected_audio_len = None
+
             if include_audio:
                 try:
                     audio = AudioSegment.from_file(temp_video_file_path)
-                    # duration of each video frame in ms
-                    # stream_video.average_rate may be Fraction; fallback to self.frame_rate
-                    fr = None
-                    if stream_video and stream_video.average_rate is not None:
-                        fr = float(stream_video.average_rate)
-                    if fr is None:
-                        fr = self.frame_rate if self.frame_rate else 30
-                    audio_per_frame_duration = 1000.0 / fr
+                    fr = float(stream_video.average_rate) if stream_video and stream_video.average_rate else (self.frame_rate or 30)
+                    frame_duration_ms = 1000.0 / fr
+                    # samples per frame (channels handled by pydub)
+                    audio_per_frame_samples = int(audio.frame_rate * frame_duration_ms / 1000.0)
+                    expected_audio_len = audio_per_frame_samples * audio.channels
                 except Exception:
                     include_audio = False
-                    print("Could not extract audio_file from video file. Audio will not be included in the video stream.")
-
-            audio_shape = None
+                    print("Could not extract audio from video file. Audio will not be included.")
 
             for frame in container.decode(video=0):
                 img = frame.to_ndarray(format='bgr24')
@@ -343,33 +336,34 @@ class VideoFile(MediaFile):
                 if not include_audio:
                     yield img
                 else:
-                    start_time = frame_count * audio_per_frame_duration
-                    end_time = start_time + audio_per_frame_duration
+                    start_time = frame_count * frame_duration_ms
+                    end_time = start_time + frame_duration_ms
                     frame_audio = audio[start_time:end_time]
-                    audio_data = np.array(frame_audio.get_array_of_samples())
 
-                    if audio_shape is None and len(audio_data) > 0:
-                        audio_shape = audio_data.shape
+                    audio_data = np.array(frame_audio.get_array_of_samples(), dtype=np.int16)
 
-                    if audio_data is None:
-                        audio_data = np.zeros(audio_shape if audio_shape is not None else (0,))
-
-                    if audio_shape is not None:
-                        if len(audio_data) < audio_shape[0]:
-                            audio_data = np.pad(audio_data, (0, audio_shape[0] - len(audio_data)), 'constant')
-                        elif len(audio_data) > audio_shape[0]:
-                            audio_data = audio_data[:audio_shape[0]]
+                    # Ensure consistent length
+                    if expected_audio_len is not None:
+                        if len(audio_data) < expected_audio_len:
+                            audio_data = np.pad(audio_data, (0, expected_audio_len - len(audio_data)), 'constant')
+                        elif len(audio_data) > expected_audio_len:
+                            audio_data = audio_data[:expected_audio_len]
 
                     yield img, audio_data
 
                 frame_count += 1
+
         finally:
             if container is not None:
                 try:
                     container.close()
                 except Exception:
                     pass
-            self._safe_remove(temp_video_file_path, silent=False, message=f"Could not remove temporary video file {temp_video_file_path}")
+            self._safe_remove(
+                temp_video_file_path,
+                silent=False,
+                message=f"Could not remove temporary video file {temp_video_file_path}"
+            )
             self.frame_count = frame_count
 
     @requires('pydub')
