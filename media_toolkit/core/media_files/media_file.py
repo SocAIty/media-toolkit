@@ -3,12 +3,12 @@ import os
 from typing import Union, BinaryIO, Optional, Tuple
 import re
 
-from media_toolkit.core.universal_file import UniversalFile
+from media_toolkit.core.media_files.universal_file import UniversalFile
 from media_toolkit.utils.dependency_requirements import requires_numpy
 from media_toolkit.utils.data_type_utils import (
     is_valid_file_path, is_url, is_starlette_upload_file, is_file_model_dict
 )
-from media_toolkit.utils.download_helper import download_file
+
 
 try:
     import numpy as np
@@ -188,24 +188,6 @@ class MediaFile(UniversalFile):
         # Parent method calls from_any internally, which routes to appropriate method
         return super().from_dict(file_result_json)
 
-    def from_url(self, url: str):
-        """
-        Download and load file from URL.
-        Extracts filename from URL before calling parent method.
-        
-        Args:
-            url: HTTP/HTTPS URL to download
-            
-        Returns:
-            Self for method chaining
-        """
-        # Extract filename from URL
-        _, original_file_name = download_file(url)
-        self.file_name = original_file_name
-        
-        # Parent method calls from_bytesio_or_handle internally with copy=False
-        return super().from_url(url)
-
     def save(self, path: str = None):
         """
         Save file to disk with automatic directory creation.
@@ -213,21 +195,12 @@ class MediaFile(UniversalFile):
         Args:
             path: Target path (directory or full path)
         """
-        if path is None:
-            path = os.path.curdir
-        elif os.path.dirname(path) != "" and not os.path.exists(os.path.dirname(path)):
-            os.makedirs(os.path.dirname(path))
-
         # Add filename if path is directory
-        if os.path.isdir(path):
-            if self.file_name is None:
-                self.file_name = "media_file"
-                print(f"No filename given. Using {self.file_name}")
-            path = os.path.join(path, self.file_name)
-
-        with open(path, 'wb') as file:
-            file.write(self.read())
-
+        if self.file_name is None:
+            self.file_name = "media_file"
+            print(f"No filename given. Using {self.file_name}")
+        super().save(path)
+        
     def _file_info(self):
         """
         Extract basic file metadata - filename from path/temp file.

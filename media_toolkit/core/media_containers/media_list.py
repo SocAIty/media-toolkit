@@ -1,8 +1,7 @@
 import io
 from typing import List, Union, Optional, Any, TypeVar, Generic
-from media_toolkit.core.media_file import MediaFile
-from media_toolkit.core.IMediaFile import IMediaContainer, IMediaFile
-from media_toolkit.core.file_conversion import media_from_any, media_from_FileModel
+from media_toolkit.core.media_files import IMediaFile, MediaFile, media_from_any, media_from_FileModel
+from media_toolkit.core.media_containers.i_media_container import IMediaContainer
 import os
 
 T = TypeVar('T', bound=IMediaFile)
@@ -134,6 +133,35 @@ class MediaList(IMediaContainer, Generic[T]):
         else:
             self._process_file(data)
         return self
+
+    def get_leaf_files(self) -> Union[List[T], List[int]]:
+        """
+        Get all media files from the container that are not IMediaContainers and their indices.
+        return:
+        - List of media files or []
+        - List of indices of the leaf files or None
+        """
+        indices = []
+        files = []
+        for i, file in enumerate(self._media_files):
+            if file not in self._media_containers:
+                files.append(file)
+                indices.append(i)
+
+        return files, indices
+
+    def get_media_containers(self) -> Union[List[IMediaContainer[T]], List[int]]:
+        """
+        Get all media containers from the container and their indices.
+
+        """
+        indices = []
+        containers = []
+        for container in self._media_containers:
+            containers.append(container)
+            indices.append(self._media_files.index(container))
+
+        return containers, indices
 
     def get_processable_files(
         self,

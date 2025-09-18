@@ -4,8 +4,8 @@ import os
 import re
 from typing import Union, BinaryIO, Tuple, Optional
 
-from media_toolkit.core.IMediaFile import IMediaFile
-from media_toolkit.core.file_content_buffer import FileContentBuffer
+from media_toolkit.core.media_files.i_media_file import IMediaFile
+from media_toolkit.core.media_files.file_content_buffer import FileContentBuffer
 from media_toolkit.utils.dependency_requirements import requires_numpy
 from media_toolkit.utils.download_helper import download_file
 from media_toolkit.utils.data_type_utils import is_valid_file_path, is_url, is_starlette_upload_file, is_likely_base64
@@ -43,13 +43,14 @@ class UniversalFile(IMediaFile):
         """
         self._content_buffer = FileContentBuffer(use_temp_file=use_temp_file, temp_dir=temp_dir)
 
-    def from_any(self, data, allow_reads_from_disk: bool = True):
+    def from_any(self, data, allow_reads_from_disk: bool = True, **kwargs):
         """
         Universal loader supporting any data type with automatic detection.
         
         Args:
             data: Input data (file path, URL, base64, bytes, numpy array, file handle, etc.)
             allow_reads_from_disk: Enable file system access (disable in web environments)
+            **kwargs: Additional arguments for other methods like headers for the from_url method.
             
         Returns:
             Self for method chaining
@@ -72,7 +73,7 @@ class UniversalFile(IMediaFile):
                     else:
                         self.from_file(data)
                 elif is_url(data):
-                    self.from_url(data)
+                    self.from_url(data, headers=kwargs.get("headers", None))
                 elif is_likely_base64(data):
                     self.from_base64(data)
                 else:
@@ -215,7 +216,7 @@ class UniversalFile(IMediaFile):
         """
         return self.from_any(file_result_json["content"])
 
-    def from_url(self, url: str):
+    def from_url(self, url: str, headers: dict = None):
         """
         Download and load file from URL.
         
@@ -225,7 +226,8 @@ class UniversalFile(IMediaFile):
         Returns:
             Self for method chaining
         """
-        file, _ = download_file(url)
+        file, original_file_name = download_file(url, headers=headers)
+        self.file_name = original_file_name
         return self.from_bytesio_or_handle(file, copy=False)
 
     @requires_numpy()
@@ -289,11 +291,14 @@ class UniversalFile(IMediaFile):
             path: Target file path (must include filename)
         """
         if path is None:
-            path = "universal_file"
+            path = os.path.curdir
 
-        # Create directory if needed
-        if os.path.dirname(path) != "" and not os.path.exists(os.path.dirname(path)):
-            os.makedirs(os.path.dirname(path))
+        # Add filename if path is directory
+        if os.path.isdir(path):
+            if self.file_name is None:
+                self.file_name = "universal_file"
+                print(f"No filename given. Using {self.file_name}")
+            path = os.path.join(path, self.file_name)
 
         with open(path, 'wb') as file:
             file.write(self.read())

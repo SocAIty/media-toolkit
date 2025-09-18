@@ -1,5 +1,7 @@
-from media_toolkit.core import MediaFile, ImageFile, VideoFile, AudioFile, MediaList, MediaDict, IMediaFile, IMediaContainer
-from media_toolkit.core.file_conversion import media_from_file, media_from_any, media_from_numpy, media_from_FileModel
+from media_toolkit.core import (
+    MediaFile, ImageFile, VideoFile, AudioFile, MediaList, MediaDict, IMediaFile, IMediaContainer,
+    media_from_file, media_from_any, media_from_numpy, media_from_FileModel
+)
 
 try:
     import importlib.metadata as metadata

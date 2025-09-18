@@ -1,7 +1,7 @@
 import io
 from typing import Optional
 from media_toolkit.utils.dependency_requirements import requires
-from media_toolkit.core.media_file import MediaFile
+from media_toolkit.core.media_files.media_file import MediaFile
 from media_toolkit.utils.generator_wrapper import SimpleGeneratorWrapper
 
 try:

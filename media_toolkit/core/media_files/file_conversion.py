@@ -4,20 +4,20 @@ Provides generalized file handling with automatic type detection.
 """
 import inspect
 from typing import Union, Any, Optional, Type
-from media_toolkit.core.IMediaFile import IMediaFile
-from media_toolkit.core.universal_file import UniversalFile
+
+# Import directly from core modules to avoid circular imports
+from media_toolkit.core.media_files.i_media_file import IMediaFile
+from media_toolkit.core.media_files.universal_file import UniversalFile
+from media_toolkit.core.media_files.media_file import MediaFile
+from media_toolkit.core.media_files.image_file import ImageFile
+from media_toolkit.core.media_files.audio_file import AudioFile
+from media_toolkit.core.media_files.video.video_file import VideoFile
+
 from media_toolkit.core.content_detectors import PureMagicContentDetector, NumpyContentTypeDetector
 from media_toolkit.utils.data_type_utils import (
     is_numpy_array_like, is_file_model_dict,
     is_valid_file_path
 )
-
-# Import directly from core modules to avoid circular imports
-from media_toolkit.core.media_file import MediaFile
-from media_toolkit.core.image_file import ImageFile
-from media_toolkit.core.audio_file import AudioFile
-from media_toolkit.core.video.video_file import VideoFile
-
 
 MediaFileType = Union[MediaFile, ImageFile, AudioFile, VideoFile]
 
@@ -174,8 +174,9 @@ def media_from_any(
     data: Any,
     type_hint=None,
     use_temp_file: bool = False,
-    temp_dir: Optional[str] = None,
-    allow_reads_from_disk: bool = True
+    temp_dir: str = None,
+    allow_reads_from_disk: bool = True,
+    **kwargs
 ) -> MediaFileType:
     """
     Convert any file input to appropriate media file with automatic type detection and hint support.
@@ -186,6 +187,7 @@ def media_from_any(
         use_temp_file: Use temporary file for large files
         temp_dir: Directory for temporary files
         allow_reads_from_disk: Allow reading from disk (disable in web environments)
+        **kwargs: Additional arguments for other methods like headers for the from_url method.
 
     Returns:
         Appropriate media file instance (ImageFile, AudioFile, VideoFile, or MediaFile)
@@ -234,7 +236,7 @@ def media_from_any(
     
     # Load data into UniversalFile first
     universal = UniversalFile(use_temp_file, temp_dir)
-    universal.from_any(data, allow_reads_from_disk=allow_reads_from_disk)
+    universal.from_any(data, allow_reads_from_disk=allow_reads_from_disk, **kwargs)
 
     # If no valid hint, use magic content detection
     if not target_class_name:
@@ -269,7 +271,8 @@ def media_from_file(file_path: str) -> MediaFileType:
 def media_from_FileModel(
     file_result: dict,
     allow_reads_from_disk: bool = False,
-    default_return_if_not_file_result: Any = None
+    default_return_if_not_file_result: Any = None,
+    **kwargs
 ) -> MediaFileType:
     """
     Convert FileModel dictionary to appropriate media file.
@@ -278,7 +281,7 @@ def media_from_FileModel(
         file_result: Dictionary with 'content_type', 'content', and 'file_name'
         allow_reads_from_disk: Allow reading from disk (security risk)
         default_return_if_not_file_result: Default return for invalid input
-
+        **kwargs: Additional arguments for other methods like headers for the from_url method.
     Returns:
         Appropriate media file instance
     """
@@ -303,4 +306,4 @@ def media_from_FileModel(
     if not allow_reads_from_disk and is_valid_file_path(content):
         raise ValueError("Reading files from disk is not allowed (security risk)")
 
-    return media_from_any(file_result, allow_reads_from_disk=allow_reads_from_disk)
+    return media_from_any(file_result, allow_reads_from_disk=allow_reads_from_disk, **kwargs)

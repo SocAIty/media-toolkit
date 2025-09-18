@@ -24,7 +24,8 @@ def _download_file(
         save_path: Optional[str] = None,
         silent: bool = True,
         timeout: int = 30,
-        chunk_size: int = 8192
+        chunk_size: int = 8192,
+        headers: dict = None
 ) -> Tuple[Union[str, BytesIO], str]:
     """
     Downloads a file from the given URL and saves it to the specified path with a progress bar.
@@ -41,7 +42,8 @@ def _download_file(
     Returns:
         A tuple containing the path to the downloaded file or the BytesIO object, and the original file name.
     """
-    headers = {"User-Agent": "media-toolkit"}
+    headers = {} if (not headers or not isinstance(headers, dict)) else headers
+    headers.update({"User-Agent": "media-toolkit"})
 
     with httpx.stream("GET", download_url, headers=headers, timeout=timeout) as response:
         response.raise_for_status()
@@ -82,7 +84,8 @@ def download_file(
         save_path: Optional[str] = None,
         silent: bool = True,
         timeout: int = 30,
-        chunk_size: int = 8192
+        chunk_size: int = 8192,
+        headers: dict = None
 ) -> Tuple[Union[str, BytesIO], str]:
     """
     Downloads a file from the given URL and saves it to the specified path with a progress bar.
@@ -100,7 +103,7 @@ def download_file(
         A tuple containing the path to the downloaded file or the BytesIO object, and the original file name.
     """
     try:
-        return _download_file(download_url, save_path, silent, timeout, chunk_size)
+        return _download_file(download_url, save_path, silent, timeout, chunk_size, headers)
     except httpx.HTTPStatusError as e:
         status_code = e.response.status_code
 
@@ -112,7 +115,7 @@ def download_file(
             try:
                 parsed_url = urlparse(download_url)
                 stripped_url = urlunparse(parsed_url._replace(query=""))
-                return _download_file(stripped_url, save_path, silent, timeout, chunk_size)
+                return _download_file(stripped_url, save_path, silent, timeout, chunk_size, headers)
             except Exception:
                 raise Exception(f"Failed to download file: {download_url}. Access permission denied.")
 

@@ -4,12 +4,14 @@ import tempfile
 from io import BytesIO
 from typing import List, Union, Optional
 
-from media_toolkit.core.video.video_utils import (add_audio_to_video_file, audio_array_to_audio_file,
-                                                  video_from_image_generator, get_audio_sample_rate_from_file)
 from media_toolkit.utils.generator_wrapper import SimpleGeneratorWrapper
 from media_toolkit.utils.dependency_requirements import requires
-from media_toolkit.core.media_file import MediaFile
-from media_toolkit.core.video.video_file_info import get_video_info, VideoInfo
+from media_toolkit.core.media_files.media_file import MediaFile
+                                                  
+from .video_utils import (
+    add_audio_to_video_file, audio_array_to_audio_file, video_from_image_generator, get_audio_sample_rate_from_file
+)
+from .video_info import get_video_info, VideoInfo
 
 try:
     import numpy as np

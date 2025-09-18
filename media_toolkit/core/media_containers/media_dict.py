@@ -1,10 +1,10 @@
 import io
 import uuid
 from typing import List, Union, Optional, Any, Dict, TypeVar, Generic
-from media_toolkit.core.IMediaFile import IMediaFile, IMediaContainer
-from media_toolkit.core.media_file import MediaFile
-from media_toolkit.core.MediaList import MediaList
-from media_toolkit.core.file_conversion import media_from_any, media_from_FileModel
+from media_toolkit.core.media_files import IMediaFile, MediaFile, media_from_any, media_from_FileModel
+from media_toolkit.core.media_containers.i_media_container import IMediaContainer
+
+from media_toolkit.core.media_containers.media_list import MediaList
 from media_toolkit.utils.data_type_utils import is_file_model_dict, is_url
 
 T = TypeVar('T', bound=IMediaFile)
@@ -172,6 +172,19 @@ class MediaDict(IMediaContainer, Generic[T]):
         """
         self.update(data)
         return self
+    
+    def get_leaf_files(self) -> Dict[str, T]:
+        """
+        Get all media files from the container that are not IMediaContainers.
+        """
+        pures = self._media_files - self._media_containers
+        return self._shallow_copy_with_settings({key: self._all_items[key] for key in pures})
+
+    def get_media_containers(self) -> Dict[str, IMediaContainer[T]]:
+        """
+        Get all media containers from the container.
+        """
+        return self._shallow_copy_with_settings({key: self._all_items[key] for key in self._media_containers})
 
     def get_processable_files(
             self,
@@ -419,7 +432,8 @@ class MediaDict(IMediaContainer, Generic[T]):
         Update the dictionary with new files.
 
         Args:
-            files: Dictionary of files to add or update
+            files: Dictionary of files to add or update.
+            If a list/MediaList or dict/MediaDict is provided, it will be added as a nested container and a random key will be generated for the nested container.
         """
         if files is None:
             return

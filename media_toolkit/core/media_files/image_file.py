@@ -1,7 +1,7 @@
 import os.path
 from typing import Tuple
 from media_toolkit.utils.dependency_requirements import requires_numpy, requires_cv2, requires
-from media_toolkit.core.media_file import MediaFile
+from media_toolkit.core.media_files.media_file import MediaFile
 from media_toolkit.core.content_detectors import PureMagicContentDetector
 
 try:
