@@ -224,4 +224,4 @@ class PureMagicContentDetector:
             'gz': 'file/gzip'
         }
         
-        return extension_mime_map.get(extension.lower(), 'application/octet-stream') 
+        return extension_mime_map.get(extension.lower(), 'application/octet-stream')

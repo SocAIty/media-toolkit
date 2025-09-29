@@ -10,7 +10,7 @@ from media_toolkit.core.media_files.i_media_file import IMediaFile
 from media_toolkit.core.media_files.universal_file import UniversalFile
 from media_toolkit.core.media_files.media_file import MediaFile
 from media_toolkit.core.media_files.image_file import ImageFile
-from media_toolkit.core.media_files.audio_file import AudioFile
+from media_toolkit.core.media_files.audio.audio_file import AudioFile
 from media_toolkit.core.media_files.video.video_file import VideoFile
 
 from media_toolkit.core.content_detectors import PureMagicContentDetector, NumpyContentTypeDetector

@@ -6,9 +6,10 @@ import os
 import cv2
 import numpy as np
 import pytest
+import time
 
 from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
-from media_toolkit.core.file_conversion import (
+from media_toolkit.core.media_files.file_conversion import (
     media_from_numpy,
     media_from_any,
     media_from_file,
@@ -26,8 +27,8 @@ test_files_dir = "test/test_files/"
 def setup_test_directory():
     """Create output directory for test files."""
     os.makedirs(outdir, exist_ok=True)
+    os.makedirs(outdir_video, exist_ok=True)
     yield
-    # Cleanup could be added here if needed
 
 
 class TestExistingFunctionality:
@@ -39,12 +40,43 @@ class TestExistingFunctionality:
         audio_file.save(f"{outdir}test_audio.wav")
         assert os.path.exists(f"{outdir}test_audio.wav")
 
+    def test_audio_stream(self):
+        """Test from test_audio_stream.py"""
+        audio_file = AudioFile().from_file(f"{test_files_dir}test_audio.wav")
+        audio_stream = audio_file.to_stream()
+        
+        from_stream_direct = AudioFile().from_stream(audio_stream)
+        assert from_stream_direct.file_size() > 0
+        from_stream_direct.save(f"{outdir}test_from_audio_stream.wav")
+        assert os.path.exists(f"{outdir}test_from_audio_stream.wav")
+
+        # Reset stream and test numpy path
+        audio_stream.container.seek(0)
+        audio_packages = []
+        for i, audio in enumerate(audio_stream.frames(output_format="numpy")):
+            audio_packages.append(audio)
+
+        audio_file_from_np = AudioFile().from_np_array(audio_packages, sample_rate=audio_stream.sample_rate)
+        audio_file_from_np.save(f"{outdir}test_from_audio_np.mp3")
+        assert os.path.exists(f"{outdir}test_from_audio_np.mp3")
+
     def test_img_from_url(self):
         """Test from test_image_file.py"""
         url = "https://socaityfiles.blob.core.windows.net/backend-model-meta/speechcraft_icon.png"
         fromurl = ImageFile().from_any(url)
         fromurl.save(f"{outdir}test_img_from_url.png")
         assert os.path.exists(f"{outdir}test_img_from_url.png")
+
+    def test_img_from_file_to_np_array(self):
+        """Test from test_image_file.py"""
+        img_file = ImageFile().from_file(f"{test_files_dir}test_image.png")
+        np_array = img_file.to_np_array()
+        assert np_array is not None
+        assert np_array.shape == (544, 512, 4)
+        assert np_array.dtype == np.uint8
+        img2 = ImageFile().from_np_array(np_array)
+        img2.save(f"{outdir}test_img_from_file_to_np_array.jpg")
+        assert os.path.exists(f"{outdir}test_img_from_file_to_np_array.jpg")
 
     def test_video_file(self):
         """Test from test_video_file.py"""
@@ -59,11 +91,11 @@ class TestExistingFunctionality:
     def test_video_from_files(self):
         """Test from test_video_file.py"""
         # First create some test images
-        self._create_test_images()
+        if not os.path.exists(f"{outdir_video}test_out_video_stream_0.png"):
+            self.test_video_stream()
         
         files = [f"{outdir_video}test_out_video_stream_{i}.png" for i in range(10)]
-        vf = VideoFile().from_files(files)
-        vf.add_audio(f"{outdir_video}extracted_audio.mp3")
+        vf = VideoFile().from_files(files, frame_rate=30, audio_file=f"{outdir_video}extracted_audio.mp3")
         vf.save(f"{outdir_video}test_from_files_add_audio.mp4")
         
         # from dir; and combine audio and video
@@ -75,35 +107,74 @@ class TestExistingFunctionality:
 
     def test_video_stream(self):
         """Test from test_video_file.py"""
-        audio_array = []
-        image_paths = []
         vf = VideoFile().from_file(f"{test_files_dir}test_video.mp4")
-        for i, (img, audio_part) in enumerate(vf.to_video_stream(include_audio=True)):
-            if i >= 10:  # Limit to 10 frames for testing
+        stream = vf.to_stream()
+        for i, img in enumerate(stream):
+            if i >= 30:  # Limit to 30 frames for testing
                 break
             p = f"{outdir_video}test_out_video_stream_{i}.png"
-            image_paths.append(p)
             cv2.imwrite(p, img)
-            audio_array.append(audio_part)
 
+        audio_packages = []
+        # Use a fresh stream for audio decoding
+        audio_stream = VideoFile().from_file(f"{test_files_dir}test_video.mp4").to_stream()
+        for i, audio in enumerate(audio_stream.audio_frames(output_format="numpy")):
+            if i >= 30:  # Limit to 30 frames for testing
+                break
+            audio_packages.append(audio)
+        audio_file = AudioFile().from_np_array(audio_packages)
+        audio_file.save(f"{outdir_video}extracted_audio.mp3")
+  
         # test video clients with audio_file
         fromdir = VideoFile().from_dir(outdir_video, audio=f"{outdir_video}extracted_audio.mp3", frame_rate=30)
         assert fromdir.file_size() > 0
-        fromstream = VideoFile().from_video_stream(fromdir.to_video_stream(include_audio=True))
+        fromstream = VideoFile().from_stream(fromdir.to_stream())
         fromstream.save(f"{outdir_video}test_from_stream.mp4")
         
         assert os.path.exists(f"{outdir_video}test_from_stream.mp4")
 
-    def _create_test_images(self):
-        """Helper method to create test images for video tests."""
-        # Create simple test images if they don't exist
-        for i in range(10):
-            img_path = f"{outdir_video}test_out_video_stream_{i}.png"
-            if not os.path.exists(img_path):
-                # Create a simple colored image
-                img = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
-                cv2.imwrite(img_path, img)
+    def test_video_stream_speed(self):
+        """Test video stream speed."""
+        # test video to stream
+        vf = VideoFile().from_file(f"{test_files_dir}test_video.mp4")
+        stream = vf.to_stream()
+        start_time = time.time()
+        video_frames = []
+        n_frames = 300
+        for i, img in enumerate(stream):
+            if i >= n_frames:
+                break
+            video_frames.append(img)
 
+        audio_frames = list(stream.audio_frames(output_format="numpy"))
+        end_time = time.time()
+        fps = n_frames / (end_time - start_time)
+        print(f"Video to stream fps: {fps}")
+        assert fps > 60
+
+        # test video encode from frames
+        start_time = time.time()
+        video_from_array = VideoFile().from_generators(video_frames, audio_generator=audio_frames, frame_rate=int(vf.video_info.frame_rate or 30))
+        end_time = time.time()
+        fps = n_frames / (end_time - start_time)
+        print(f"Video encode from frames fps: {fps}")
+        assert fps > 30
+        video_from_array.save(f"{outdir_video}test_video_stream_speed.mp4")
+        assert os.path.exists(f"{outdir_video}test_video_stream_speed.mp4")
+
+    def test_direct_to_and_from_stream(self):
+        """Test direct to and from stream."""
+        in_path = f"{test_files_dir}test_video.mp4"
+        out_path = f"{outdir_video}test_direct_to_and_from_stream.mp4"
+        # from file
+        vf = VideoFile().from_file(in_path)
+        video_gen = vf.to_stream()
+        fromstream = VideoFile().from_stream(video_gen)
+        # save the video
+        fromstream.save(out_path)
+        # check if the video is roughly the same
+        assert abs(fromstream.file_size() - vf.file_size()) < 1024 * 1024  # smaller 1kb
+       
 
 class TestFileConversionUtilities:
     """Tests for file conversion utility functions."""
@@ -289,12 +360,18 @@ def run_all_tests():
     setup_test_directory()
     # Run existing functionality tests
     existing_tests = TestExistingFunctionality()
-    print("Running existing functionality tests...")
-    existing_tests.test_audio_file()
-    print("✓ Audio file test passed")
     
     existing_tests.test_img_from_url()
     print("✓ Image from URL test passed")
+
+    existing_tests.test_img_from_file_to_np_array()
+    print("✓ Image from file to np array test passed")
+
+    existing_tests.test_audio_file()
+    print("✓ Audio file test passed")
+    
+    existing_tests.test_audio_stream()
+    print("✓ Audio stream test passed")
     
     existing_tests.test_video_file()
     print("✓ Video file test passed")
@@ -305,6 +382,12 @@ def run_all_tests():
     existing_tests.test_video_stream()
     print("✓ Video stream test passed")
     
+    existing_tests.test_video_stream_speed()
+    print("✓ Video stream speed test passed")
+
+    existing_tests.test_direct_to_and_from_stream()
+    print("✓ Direct to and from stream test passed")
+
     # Run file conversion tests
     conversion_tests = TestFileConversionUtilities()
     print("\nRunning file conversion utility tests...")

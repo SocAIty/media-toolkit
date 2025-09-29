@@ -11,7 +11,12 @@ class VideoInfo:
     duration: float = None
     width: int = None
     height: int = None
+    pix_fmt: str = None
+    video_codec: str = None          # e.g., 'h264', 'hevc'
+    video_bit_rate: int = None       # e.g., 5000000 (bits/s)
     audio_sample_rate: int = None
+    audio_channels: int = None
+    audio_codec: str = None
 
     def __post_init__(self):
         self._derive_missing()
@@ -67,14 +72,25 @@ def _probe_pyav(file_path: str) -> Dict[str, Any]:
         import av
         with av.open(file_path) as c:
             v = next((s for s in c.streams if s.type == "video"), None)
+            a = next((s for s in c.streams if s.type == "audio"), None)
             if not v:
                 return {}
-            return {
+            result = {
                 "frame_rate": _safe_float(getattr(v, "average_rate", None)),
                 "frame_count": _safe_int(getattr(v, "frames", None)),
                 "width": _safe_int(getattr(v, "width", None)),
                 "height": _safe_int(getattr(v, "height", None)),
+                "pix_fmt": getattr(v, "pix_fmt", None),
+                "video_codec": getattr(v, "codec_name", None),
+                "video_bit_rate": _safe_int(getattr(v, "bit_rate", None)),
             }
+            if a:
+                result.update({
+                    "audio_sample_rate": _safe_int(getattr(a, "sample_rate", None)),
+                    "audio_channels": _safe_int(getattr(a, "channels", None)),
+                    "audio_codec": getattr(a, "name", None),
+                })
+            return result
     except Exception:
         return {}
 
@@ -84,14 +100,22 @@ def _probe_mediainfo(file_path: str) -> Dict[str, Any]:
         from pydub.utils import mediainfo
         info = mediainfo(file_path)
         fps = _safe_float(info.get("avg_frame_rate")) or _safe_float(info.get("r_frame_rate"))
-        return {
+        result = {
             "frame_rate": fps,
             "frame_count": _safe_int(info.get("nb_frames")),
             "duration": _safe_float(info.get("duration")),
             "width": _safe_int(info.get("width")),
             "height": _safe_int(info.get("height")),
-            "audio_sample_rate": _safe_int(info.get("sample_rate")) or 44100,
+            "pix_fmt": info.get("pix_fmt"),
         }
+        # Add audio info if present
+        if info.get("sample_rate"):
+            result.update({
+                "audio_sample_rate": _safe_int(info.get("sample_rate")),
+                "audio_channels": _safe_int(info.get("channels")),
+                "audio_codec": info.get("codec_name"),
+            })
+        return result
     except Exception:
         return {}
 

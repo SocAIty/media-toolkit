@@ -30,14 +30,11 @@ ImageFile = [
 ]
 AudioFile = [
     "numpy>=1.18.0",
-    "soundfile>=0.12.0",
-    "pydub"
+    "soundfile>=0.12.0"
 ]
 VideoFile = [
     "opencv-python>=4.2",
     "numpy>=1.18.0",
-    "soundfile>=0.12.0",
-    "pydub",
     "av"
 ]
 dev = [
@@ -45,6 +42,5 @@ dev = [
     "opencv-python>=4.2",
     "numpy>=1.18.0",
     "soundfile>=0.12.0",
-    "pydub",
     "av"
 ]

@@ -1,17 +1,15 @@
-import glob
-import os
+import io
 import tempfile
-from io import BytesIO
-from typing import List, Union, Optional
-
-from media_toolkit.utils.generator_wrapper import SimpleGeneratorWrapper
-from media_toolkit.utils.dependency_requirements import requires
+import os
+import glob
+from typing import Iterator, Optional, Union, List, Literal
+from fractions import Fraction
 from media_toolkit.core.media_files.media_file import MediaFile
-                                                  
-from .video_utils import (
-    add_audio_to_video_file, audio_array_to_audio_file, video_from_image_generator, get_audio_sample_rate_from_file
-)
-from .video_info import get_video_info, VideoInfo
+from media_toolkit.core.media_files.audio.audio_file import AudioFile
+from media_toolkit.core.media_files.video.video_stream import VideoStream
+from media_toolkit.utils.dependency_requirements import requires
+from .video_info import VideoInfo, get_video_info
+from media_toolkit.utils.generator_wrapper import SimpleGeneratorWrapper
 
 try:
     import numpy as np
@@ -20,41 +18,58 @@ except ImportError:
 
 try:
     import av
-    try:
-        av.logging.set_level(24)  # warning level
-    except Exception:
-        pass
-except ImportError:
+    av.logging.set_level(24)  # warning level
+except Exception:
     pass
 
-try:
-    from pydub import AudioSegment
-except ImportError:
-    pass
+
+IMG_COLOR_FORMATS = Literal["rgb24", "bgr24"]
 
 
 class VideoFile(MediaFile):
     """
-    A class to represent a video file.
+    A class to represent and process a video file using PyAV for efficient,
+    packet-based stream handling.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.video_info: Optional[VideoInfo] = None
-        self.frame_count = None
-        self.frame_rate = None
-        self.width = None
-        self.height = None
-        self.shape = None
-        self.duration = None
-        self.audio_sample_rate = None
-        self._temp_file_path = None  # if to_temp_file is called, the path is stored here. Needed clean deletion
+        self._video_info = None
+        self._temp_file_path = None
+
+    def _get_video_info(self):
+        if self.path is not None:
+            self._video_info = get_video_info(self.path)
+        elif self._content_buffer is not None:
+            self._video_info = get_video_info(self._content_buffer)
+        else:
+            self._video_info = None
+        return self._video_info
+
+    @property
+    def audio(self) -> Optional[AudioFile]:
+        """Extracts the audio stream into an AudioFile object."""
+        try:
+            audio_bytes = self.extract_audio(export_type='aac')
+            if audio_bytes:
+                return AudioFile().from_bytes(audio_bytes)
+        except (ValueError, RuntimeError):
+            # Handles cases with no audio stream or extraction errors
+            return None
+        return None
+
+    @property
+    def video_info(self) -> VideoInfo:
+        if self._video_info is not None:
+            return self._video_info
+        return self._get_video_info()
+
+    def _file_info(self):
+        super()._file_info()
+        self._get_video_info()
 
     def _safe_remove(self, path: str, silent: bool = True, message: str = None):
-        """
-        Remove a file if it exists. Optionally print a message on failure.
-        Clears `_temp_file_path` if it matches the removed path.
-        """
+        """Safely removes a file if it exists."""
         if not path:
             return
         try:
@@ -70,333 +85,456 @@ class VideoFile(MediaFile):
             if self._temp_file_path == path:
                 self._temp_file_path = None
 
-    def from_files(self, image_files: Union[List[str], list], frame_rate: int = 30, audio_file=None):
+    def _image_to_ndarray(self, image_file: str, color_format: IMG_COLOR_FORMATS = "bgr24") -> np.ndarray:
+        """Converts an image file to a numpy array."""
+        container = av.open(image_file)
+        for frame in container.decode(video=0):
+            img_array = frame.to_ndarray(format=color_format)  # shape: (H, W, 3), dtype=uint8
+            break  # only need the first frame for an image
+        return img_array
+
+    @requires('av', 'numpy')
+    def from_image_generator(
+        self,
+        frame_generator: Union[Iterator, list],
+        frame_rate: int = 30,
+        px_fmt: str = "yuv420p",
+        color_format: IMG_COLOR_FORMATS = "bgr24",
+    ) -> 'VideoFile':
         """
-        Creates a video based of a list of image files and an audio_file file.
-        :param image_files: A list of image files to convert to a video. Either paths or numpy arrays.
-        :param frame_rate: The frame rate of the video.
-        :param audio_file: The audio_file file to add to the video, as path, bytes or AudioSegment.
+        Encode video frames from a generator into this VideoFile using PyAV.
         """
-        # Check if there are images in the list
+        frames_iter_wrapper = SimpleGeneratorWrapper(frame_generator)
+        gen = iter(frames_iter_wrapper)
+
+        # Peek a first valid frame for dimensions
+        first_frame = None
+        try:
+            while first_frame is None:
+                first_frame = next(gen)
+        except StopIteration:
+            raise ValueError("frame_generator produced no frames")
+
+        def rebuilt_frame_iter():
+            yield first_frame
+            for f in gen:
+                if f is None:
+                    continue
+                yield f
+
+        height, width = first_frame.shape[0], first_frame.shape[1]
+
+        temp_video_path = tempfile.mktemp(suffix=".mp4")
+        try:
+            container = av.open(temp_video_path, mode="w", format="mp4")
+
+            rate = frame_rate
+            if isinstance(rate, float):
+                rate = Fraction(rate).limit_denominator(10000)
+
+            v_stream = container.add_stream('libx264', rate=rate)
+            v_stream.width = width
+            v_stream.height = height
+            v_stream.pix_fmt = px_fmt or 'yuv420p'
+
+            for frame_nd in rebuilt_frame_iter():
+                if frame_nd is None:
+                    continue
+                if frame_nd.ndim == 2:
+                    frame_nd = np.stack([frame_nd] * 3, axis=-1)
+                if frame_nd.shape[-1] == 4:
+                    frame_nd = frame_nd[:, :, :3]
+                if frame_nd.dtype != np.uint8:
+                    frame_nd = np.asarray(frame_nd).astype(np.uint8)
+                frame = av.VideoFrame.from_ndarray(frame_nd, format=color_format)
+                frame.pts = None
+                for packet in v_stream.encode(frame):
+                    container.mux(packet)
+
+            for packet in v_stream.encode():
+                container.mux(packet)
+
+            container.close()
+
+            self.from_file(temp_video_path)
+            self._file_info()
+        finally:
+            self._safe_remove(temp_video_path)
+
+        return self
+
+    @requires('av', 'numpy')
+    def from_generators(
+        self,
+        frame_generator: Union[Iterator, list],
+        audio_generator: Optional[Union[Iterator, list]] = None,
+        frame_rate: int = 30,
+        audio_sample_rate: int = 44100,
+        px_fmt: str = "yuv420p",
+        audio_type: str = "wav",
+    ) -> 'VideoFile':
+        """
+        Creates a new VideoFile from separate generators for video frames and audio data.
+        Args:
+            frame_generator: Iterator yielding image frames (numpy arrays)
+            audio_generator: Optional iterator yielding audio chunks (numpy arrays)
+            frame_rate: Video frame rate
+            audio_sample_rate: Audio sample rate
+            px_fmt: Pixel format for video encoding
+            audio_codec: Audio codec to use
+        """
+        # First, encode the video part using helper
+        self.from_image_generator(frame_generator=frame_generator, frame_rate=frame_rate, px_fmt=px_fmt)
+
+        # If audio is provided, build an AudioFile and mux it using existing add_audio
+        if audio_generator is not None:
+            # Normalize audio chunks (support list or iterator of numpy arrays)
+            audio_file = AudioFile().from_audio_generator(audio_generator, sample_rate=audio_sample_rate, file_type=audio_type, input_layout="pyav")
+            self.add_audio(audio_file)
+        
+        return self
+
+    def from_files(self, image_files: Union[List[str], list], frame_rate: int = 30, img_color_format: IMG_COLOR_FORMATS = "bgr24", audio_file=None):
+        """
+        Creates a video from a list of image files; optionally adds audio.
+        """
         if not image_files:
             raise ValueError("The list of image files is empty.")
 
-        # Create a temporary file to store the video
-        temp_vid_file_path = video_from_image_generator(image_files, frame_rate=frame_rate, save_path=None)
-        # Merge video and audio_file using pydub
-        if audio_file is not None:
-            combined = add_audio_to_video_file(video_file=temp_vid_file_path, audio_file=audio_file)
-            # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
-            super(MediaFile, self).from_file(combined)
-            self._file_info()
-            self._safe_remove(combined)
-            self._safe_remove(temp_vid_file_path)
-            return self
+        def image_gen():
+            for image_file in image_files:
+                try:
+                    yield self._image_to_ndarray(image_file, color_format=img_color_format)
+                except Exception as e:
+                    print(f"Error converting image file {image_file} to numpy array: {e}")
+                    continue
 
-        # Init self from the temp file
-        # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
-        super(MediaFile, self).from_file(temp_vid_file_path)
-        self._file_info()
-        # remove tempfile
-        self._safe_remove(temp_vid_file_path)
+        self.from_generators(SimpleGeneratorWrapper(image_gen, len(image_files)), frame_rate=frame_rate)
+        
+        if audio_file is not None:
+            self.add_audio(audio_file)
 
         return self
 
-    def from_image_files(self, image_files: List[str], frame_rate: int = 30):
-        """
-        Converts a list of image files into a video file.
-        """
-        return self.from_files(image_files, frame_rate, audio_file=None)
+    def from_image_files(self, image_files: List[str], frame_rate: int = 30, img_color_format: IMG_COLOR_FORMATS = "bgr24"):
+        """Convenience method to create a video from images only."""
+        return self.from_files(image_files, frame_rate, img_color_format=img_color_format, audio_file=None)
 
     def from_dir(self, dir_path: str, audio: Union[str, list] = None, frame_rate: int = 30):
-        """
-        Converts all images in a directory into a video file.
-        """
-        image_types = ["*.png", "*.jpg", "*.jpeg"]
+        """Creates a video from a directory of images and an optional audio file."""
+        image_types = ["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff"]
         image_files = []
         for image_type in image_types:
             image_files.extend(glob.glob(os.path.join(dir_path, image_type)))
-        # sort by date to make sure the order is correct
         image_files.sort(key=lambda x: os.path.getmtime(x))
 
-        # if audio_file is none, take the first audio_file file in the directory
         if audio is None:
             audio_types = ["*.wav", "*.mp3"]
             for audio_type in audio_types:
-                audio = glob.glob(os.path.join(dir_path, audio_type))
-                if len(audio) > 0:
-                    audio = audio[0]
-                else:
-                    audio = None
+                audio_candidate = glob.glob(os.path.join(dir_path, audio_type))
+                if len(audio_candidate) > 0:
+                    audio = audio_candidate[0]
+                    break
 
         return self.from_files(image_files=image_files, frame_rate=frame_rate, audio_file=audio)
 
-    def add_audio(self, audio_file: Union[str, list], sample_rate: int = 44100):
-        """
-        Adds audio to the video file.
-        :param audio_file: The audio_file file to add to the video, as path, or numpy array.
-            In case of a file, the sample rate is determined from the file.
-        :param sample_rate: If the audio_file is a numpy array, the sample rate should be provided.
-        """
-
-        # Ensure we have a temp video file available and tracked
-        tmp = self._to_temp_file()
-
-        if self.audio_sample_rate is None:
-            if self.frame_rate is None:
-                raise Exception("The frame rate of the video file is not set. Read a video file first.")
-
-            if os.path.isfile(audio_file):
-                self.audio_sample_rate = get_audio_sample_rate_from_file(audio_file)
-            else:
-                # Derive sample rate from the video temp file if audio_file is an array
-                self.audio_sample_rate = get_audio_sample_rate_from_file(tmp)
-
-        # Normalize audio input to a file path and track if it's a temp we created
-        local_audio_file = audio_file
-        temp_audio_created = False
-        if isinstance(audio_file, list) or isinstance(audio_file, np.ndarray):
-            local_audio_file = audio_array_to_audio_file(audio_file, sample_rate=sample_rate)
-            temp_audio_created = True
-
-        combined = add_audio_to_video_file(tmp, local_audio_file)
-        # Call UniversalFile.from_file directly to avoid duplicate _file_info calls
-        super(MediaFile, self).from_file(combined)
-        self._file_info()
-        self._safe_remove(tmp)
-        if temp_audio_created:
-            self._safe_remove(local_audio_file)
-        self._safe_remove(combined)
-        return self
-
     def _to_temp_file(self):
-        # get suffix
-        if self.content_type is None:
-            raise ValueError("The content type of the video file is not set.")
-        if "/" in self.content_type:
-            suffix = self.content_type.split("/")[1]
-            if suffix == 'octet-stream':
-                raise ValueError("The content type of the video file is not valid. Read a video file first.")
-        else:
-            suffix = "mp4"
-
-        # If already using temp file storage, return path
-        if self._content_buffer._use_temp_file:
-            return self._content_buffer.name
-
-        # create new temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{suffix}") as temp_video_file:
-            temp_video_file.write(self.read())
-            temp_video_file_path = temp_video_file.name
-
-        self._temp_file_path = temp_video_file_path
-        return temp_video_file_path
-
-    @requires('av', 'numpy', 'pydub')
-    def from_video_stream(self, video_audio_stream, frame_rate: int = 30, audio_sample_rate: int = 44100):
-        """
-        Given a generator that yields video frames and audio_file data as numpy arrays, this creates a video.
-        The generator is expected to be in the form of: VideoFile().to_video_stream()
-            or a generator that yields images as numpy arrays like VideoFile().to_image_stream().
-        """
-        # Reset and pre-settings
-        self._reset_buffer()
-
-        audio_frames = []
-
-        def _frame_gen():
-            for frame in video_audio_stream:
-                if isinstance(frame, tuple) and len(frame) == 2:
-                    frame, audio_data = frame
-                    if audio_data is None or len(audio_data) == 0:
-                        # no audio data, add silence
-                        audio_data = np.zeros(0, dtype=np.int16)
-                    audio_frames.append(audio_data)
-                yield frame
-
-        video_gen_wrapper = _frame_gen()
-        if hasattr(video_audio_stream, '__len__'):
-            video_gen_wrapper = SimpleGeneratorWrapper(video_gen_wrapper, length=len(video_audio_stream))
-
-        # Write video (no audio yet)
-        temp_video_file_path = video_from_image_generator(video_gen_wrapper, frame_rate=frame_rate, save_path=None)
-
-        combined = temp_video_file_path
-        temp_audio_file = None
-
-        # Add audio if available
-        if len(audio_frames) > 0:
-            try:
-                # Flatten jagged list of arrays into a contiguous 1-D buffer
-                audio_np = np.concatenate(audio_frames) if isinstance(audio_frames[0], np.ndarray) else np.array(audio_frames)
-                temp_audio_file = audio_array_to_audio_file(audio_np, sample_rate=audio_sample_rate)
-                combined = add_audio_to_video_file(temp_video_file_path, temp_audio_file)
-            except Exception as e:
-                print(f"Error adding audio_file to video. Returning video without audio. Error: {str(e)} traceback: {e.__traceback__} ")
-                combined = temp_video_file_path
-
-        # Init self from the final file
-        super(MediaFile, self).from_file(combined)
-        self._file_info()  # ensures content_type, frame_count, duration, etc.
-
-        # Cleanup AFTER info extraction
-        if temp_audio_file:
-            self._safe_remove(temp_audio_file)
-        if combined != temp_video_file_path:
-            self._safe_remove(combined)
-        self._safe_remove(temp_video_file_path)
-
-        return self
-
-    def _file_info(self):
-        """
-        Enhanced file info extraction with video-specific metadata.
-        Handles both filename extraction and content type detection in one pass.
-        Uses strategy pattern to detect: PyAV > MediaInfo > OpenCV.
-        Sets: file_name, content_type, frame_count, duration, width, height, shape, audio_sample_rate, frame_rate
-        """
-        # First, handle basic filename extraction from parent
-        super()._file_info()
-        if self.file_size() == 0:
-            return
-
-        # Ensure we have a filesystem path
-        path = self.path
-        saved_to_temporary_file = False
-        if not path or not os.path.exists(path):
-            path = self._to_temp_file()
-            saved_to_temporary_file = True
-
-        # Get video info using utility function and store it
-        self.video_info = get_video_info(path)
-
-        # Set attributes from VideoInfo for backward compatibility
-        self.frame_rate = self.video_info.frame_rate
-        self.frame_count = self.video_info.frame_count
-        self.duration = self.video_info.duration
-        self.width = self.video_info.width
-        self.height = self.video_info.height
-        self.audio_sample_rate = self.video_info.audio_sample_rate
-
-        # Prefer VideoInfo.shape computation
-        self.shape = self.video_info.shape
-
-        # Cleanup and defaults
-        if saved_to_temporary_file:
-            self._safe_remove(path)
-
+        """Saves the in-memory content to a temporary file for PyAV processing."""
         if self.content_type is None:
             self.content_type = "video/mp4"
-
-        if self.file_name == "file":
-            self.file_name = "videofile"
-
-    @requires('av')
-    def to_image_stream(self):
-        return self.to_video_stream(include_audio=False)
-
-    @requires('pydub', 'av')
-    def to_video_stream(self, include_audio=True):
+        
+        suffix = self.content_type.split("/")[-1] if "/" in self.content_type else "mp4"
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{suffix}") as temp_file:
+            temp_file.write(self.read())
+            temp_path = temp_file.name
+        
+        self._temp_file_path = temp_path
+        return temp_path
+    
+    @requires('av', 'numpy')
+    def extract_audio(self, path: str = None, export_type: str = 'mp3') -> Union[bytes, str]:
         """
-        Yields video frames and audio_file data as numpy arrays.
-        :param include_audio: if the audio_file is included in the video stream. If not it will only yield the video frames.
-        :return:
+        Extracts the audio from the video file and saves it to a file or returns as bytes.
+        
+        Args:
+            path (str, optional): The path to save the audio file. If None, audio is returned as bytes.
+            export_type (str, optional): The audio file format. Defaults to 'mp3'.
+        
+        Returns:
+            Union[bytes, str]: The path to the audio file if path is provided, otherwise the audio data as bytes.
         """
-        if self.file_size() == 0:
-            raise ValueError("The video file is empty.")
+        temp_file_path = None
+        output_path = path
 
-        self._content_buffer.seek(0)
-        temp_video_file_path = self._to_temp_file()
-
-        container = None
-        frame_count = 0
+        if output_path is None:
+            output_buffer = io.BytesIO()
+            container_out_target = output_buffer
+        else:
+            container_out_target = output_path
+            # Ensure the output directory exists
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
 
         try:
-            container = av.open(temp_video_file_path)
+            temp_file_path = self._to_temp_file()
+            container = av.open(temp_file_path)
 
-            stream_video = next((s for s in container.streams if s.type == 'video'), None)
+            audio_stream = next((s for s in container.streams if s.type == 'audio'), None)
+            if audio_stream is None:
+                raise ValueError("No audio stream found in the video file.")
+            
+            output_container = av.open(container_out_target, 'w', format=export_type)
+            output_stream = output_container.add_stream(export_type, rate=audio_stream.sample_rate)
 
-            audio = None
-            audio_per_frame_samples = None
-            expected_audio_len = None
+            for frame in container.decode(audio_stream):
+                for packet in output_stream.encode(frame):
+                    output_container.mux(packet)
+            
+            # Flush the encoder
+            for packet in output_stream.encode():
+                output_container.mux(packet)
 
-            if include_audio:
-                try:
-                    audio = AudioSegment.from_file(temp_video_file_path)
-                    fr = float(stream_video.average_rate) if stream_video and stream_video.average_rate else (self.frame_rate or 30)
-                    frame_duration_ms = 1000.0 / fr
-                    # samples per frame (channels handled by pydub)
-                    audio_per_frame_samples = int(audio.frame_rate * frame_duration_ms / 1000.0)
-                    expected_audio_len = audio_per_frame_samples * audio.channels
-                except Exception:
-                    include_audio = False
-                    print("Could not extract audio from video file. Audio will not be included.")
+            output_container.close()
+            container.close()
 
-            for frame in container.decode(video=0):
-                img = frame.to_ndarray(format='bgr24')
+            if output_path is None:
+                return output_buffer.getvalue()
+            return output_path
 
-                if not include_audio:
-                    yield img
-                else:
-                    start_time = frame_count * frame_duration_ms
-                    end_time = start_time + frame_duration_ms
-                    frame_audio = audio[start_time:end_time]
-
-                    audio_data = np.array(frame_audio.get_array_of_samples(), dtype=np.int16)
-
-                    # Ensure consistent length
-                    if expected_audio_len is not None:
-                        if len(audio_data) < expected_audio_len:
-                            audio_data = np.pad(audio_data, (0, expected_audio_len - len(audio_data)), 'constant')
-                        elif len(audio_data) > expected_audio_len:
-                            audio_data = audio_data[:expected_audio_len]
-
-                    yield img, audio_data
-
-                frame_count += 1
-
+        except Exception as e:
+            if output_path and os.path.exists(output_path):
+                self._safe_remove(output_path)
+            raise RuntimeError(f"Failed to extract audio: {e}") from e
         finally:
-            if container is not None:
-                try:
-                    container.close()
-                except Exception:
-                    pass
-            self._safe_remove(
-                temp_video_file_path,
-                silent=False,
-                message=f"Could not remove temporary video file {temp_video_file_path}"
-            )
-            self.frame_count = frame_count
+            self._safe_remove(temp_file_path)
+            
+    @requires('av')
+    def add_audio(self, audio_file: Union[str, AudioFile]):
+        """
+        Adds audio to the video file.
+        :param audio_file: The audio file to add, as a path or an AudioFile object.
+        """
+        temp_video_path = None
+        # Use .mp4 as the suffix is the most common format for combined video/audio
+        temp_output_path = tempfile.mktemp(suffix=".mp4")
+        
+        audio_container_source = audio_file if isinstance(audio_file, str) else audio_file.to_bytes_io()
 
-    @requires('pydub')
-    def extract_audio(self, path: str = None, export_type: str = 'mp3') -> Union[bytes, None]:
-        temp_video_file_path = self._to_temp_file()
-        audio = AudioSegment.from_file(temp_video_file_path)
+        try:
+            temp_video_path = self._to_temp_file()
+            
+            with av.open(temp_video_path, 'r') as video_container, \
+                 av.open(audio_container_source, 'r') as audio_container, \
+                 av.open(temp_output_path, 'w') as output_container:
+                
+                # --- Stream Setup ---
+                
+                video_stream = next((s for s in video_container.streams if s.type == 'video'), None)
+                input_audio_stream = next((s for s in audio_container.streams if s.type == 'audio'), None)
 
-        if path is not None and len(path) > 0:
-            dirname = os.path.dirname(path)
-            if len(dirname) > 0 and not os.path.isdir(dirname):
-                os.makedirs(dirname)
-            audio.export(path, format=export_type)
-            self._safe_remove(temp_video_file_path)
-            return None
+                if not video_stream:
+                    raise ValueError("No video stream found in the video file.")
+                if not input_audio_stream:
+                    raise ValueError("No audio stream found in the audio file.")
 
-        # return as bytes
-        file = BytesIO()
-        file = audio.export(file, format=export_type)
-        file.seek(0)
-        data = file.read()
-        file.close()
-        # remove tempfile
-        self._safe_remove(temp_video_file_path)
-        return data
+                # Get video duration to trim audio
+                video_duration = float(video_stream.duration * video_stream.time_base)
+
+                # Video Stream: Copy properties, re-encode to 'libx264' for broad compatibility
+                output_video_stream = output_container.add_stream('libx264', rate=video_stream.average_rate)
+                output_video_stream.width = video_stream.width
+                output_video_stream.height = video_stream.height
+                output_video_stream.pix_fmt = 'yuv420p'  # Common for H.264
+                
+                # Audio Stream: Re-encode to 'aac'.
+                OUTPUT_SAMPLE_RATE = 44100
+                OUTPUT_LAYOUT = 'stereo'  # Use stereo as a standard
+                
+                output_audio_stream = output_container.add_stream('aac', rate=OUTPUT_SAMPLE_RATE, layout=OUTPUT_LAYOUT)
+
+                # Create an Audio Resampler
+                resampler = av.AudioResampler(
+                    format='fltp',  # Preferred float format for encoding
+                    layout=OUTPUT_LAYOUT,
+                    rate=OUTPUT_SAMPLE_RATE,
+                )
+
+                # --- Muxing & Transcoding ---
+
+                # Transcode and Mux Video
+                for frame in video_container.decode(video_stream):
+                    for packet in output_video_stream.encode(frame):
+                        output_container.mux(packet)
+                
+                # Transcode and Mux Audio (using the resampler)
+                for frame in audio_container.decode(input_audio_stream):
+                    # Check if audio frame is beyond video duration
+                    if frame.pts * input_audio_stream.time_base > video_duration:
+                        break
+                    
+                    # Resample the input frame
+                    resampled_frames = resampler.resample(frame)
+                    
+                    if resampled_frames:
+                        for resampled_frame in resampled_frames:
+                            for packet in output_audio_stream.encode(resampled_frame):
+                                output_container.mux(packet)
+
+                # Flush the encoders
+                
+                # 1. Flush the video encoder
+                for packet in output_video_stream.encode():
+                    output_container.mux(packet)
+                
+                # 2. Flush the audio resampler: Pass None to retrieve buffered frames (Fix for older PyAV)
+                for resampled_frame in resampler.resample(None):
+                    for packet in output_audio_stream.encode(resampled_frame):
+                        output_container.mux(packet)
+                
+                # 3. Flush the audio encoder
+                for packet in output_audio_stream.encode():
+                    output_container.mux(packet)
+
+            # Update the VideoFile object with the new file
+            self.from_file(temp_output_path)
+            self._file_info()
+            
+        except Exception as e:
+            # Clean up temporary file on failure
+            self._safe_remove(temp_output_path)
+            raise RuntimeError(f"Failed to add audio to video: {e}") from e
+        finally:
+            # Always clean up the temporary files
+            self._safe_remove(temp_video_path)
+
+    @requires('av')
+    def to_stream(self) -> VideoStream:
+        """
+        Creates a VideoStream for easy frame-by-frame processing.
+        
+        Args:
+            include_audio: Whether to include audio stream
+            color_format: Color format for video frames ("rgb24" or "bgr24")
+            
+        Returns:
+            VideoStream object for iterating over frames and audio
+        """
+        if self.file_size() == 0:
+            raise ValueError("Empty video file")
+
+        buf = io.BytesIO(self.read())
+        return VideoStream(buf, self.video_info)
+            
+    @requires('av', 'numpy')
+    def from_stream(
+        self,
+        stream: VideoStream,
+    ) -> 'VideoFile':
+        """
+        Creates a new VideoFile from a VideoStream, re-encoding video and audio
+        (as they are assumed modified) while reusing original codec parameters
+        to maintain file size/quality as closely as possible.
+        """
+        if not isinstance(stream, VideoStream):
+            raise ValueError("Stream must be a VideoStream object. Try from_generators() instead.")
+        
+        temp_file_path = tempfile.mktemp(suffix=".mp4")
+        # Use 'mp4' format for compatibility, but the codecs will be preserved/reused
+        container = av.open(temp_file_path, mode="w", format="mp4")
+        
+        video_info = stream.video_info
+        if video_info is None:
+            raise ValueError("VideoStream object must contain video_info")
+        
+        # --- VIDEO WRITER SETUP (Smart Re-encode) ---
+        
+        rate = video_info.frame_rate
+        if isinstance(rate, float):
+            rate = Fraction(rate).limit_denominator(10000)
+
+        # 1. Video Codec Selection & Setup
+        # Try to use the original codec if it's a standard encoding one (e.g., h264/h265)
+        video_codec = video_info.video_codec if video_info.video_codec in ('libx264', 'h264', 'hevc', 'libx265') else 'libx264'
+        
+        v_writer = container.add_stream(video_codec, rate=rate)
+        v_writer.width = video_info.width
+        v_writer.height = video_info.height
+        v_writer.pix_fmt = video_info.pix_fmt or 'yuv420p'
+        
+        # Set Bit Rate or CRF for size/quality control
+        if video_info.video_bit_rate:
+            v_writer.bit_rate = video_info.video_bit_rate  # Use .bit_rate property for setting rate
+        else:
+            v_writer.options['crf'] = '23'  # Standard default CRF for H.264/265
+            
+        # --- AUDIO WRITER SETUP (Smart Re-encode) ---
+        
+        a_writer = None
+        if stream.has_audio and stream._audio_stream and video_info.audio_sample_rate:            
+            # 1. Audio Codec Selection & Setup: Prefer original or fallback to 'aac'
+            audio_codec = video_info.audio_codec if video_info.audio_codec and video_info.audio_codec != 'raw' else 'aac'
+            
+            # The FIX for the TypeError: Must pass the codec name explicitly!
+            a_writer = container.add_stream(audio_codec)
+            
+            # Apply known properties (like sample rate and layout) from the original
+            a_writer.rate = video_info.audio_sample_rate
+            # Fallback to stereo if layout is unknown/missing
+            layout = 'stereo' if video_info.audio_channels == 2 else 'mono'
+            a_writer.layout = layout
+
+        # --- MUXING ---
+
+        # Process both video and audio in a single demux pass
+        for packet in stream.container.demux():
+            
+            # 1. Video Re-encode (Assumed Modified)
+            if packet.stream.type == 'video' and packet.stream == stream._video_stream:
+                for frame in packet.decode():
+                    for encoded_packet in v_writer.encode(frame):
+                        container.mux(encoded_packet)
+                        
+            # 2. Audio Re-encode (Assumed Modified)
+            elif a_writer and packet.stream.type == 'audio' and packet.stream == stream._audio_stream:
+                for frame in packet.decode():
+                    for encoded_packet in a_writer.encode(frame):
+                        container.mux(encoded_packet)
+        
+        # Flush both encoders
+        for packet in v_writer.encode():
+            container.mux(packet)
+        
+        if a_writer:
+            for packet in a_writer.encode():
+                container.mux(packet)
+        
+        container.close()
+        self.from_file(temp_file_path)
+        self._safe_remove(temp_file_path)
+        return self
 
     def __iter__(self):
-        return self.to_video_stream()
+        """Iterates over the video frames as numpy arrays (re-encoding)."""
+        if self.file_size() == 0:
+            raise ValueError("Empty video file")
+        
+        buf = io.BytesIO(self.read())
+        container = av.open(buf)
+        video_stream = next((s for s in container.streams if s.type == 'video'), None)
+        if not video_stream:
+            raise ValueError("No video stream found")
+        
+        def frame_gen():
+            for frame in container.decode(video_stream):
+                yield frame.to_ndarray(format='rgb24')
+        
+        return frame_gen()
 
     def __len__(self):
-        return int(self.frame_count)
-
+        return int(self.video_info.frame_count) if self.video_info and self.video_info.frame_count else 0
+    
     def __del__(self):
         if self._temp_file_path is not None:
             self._safe_remove(self._temp_file_path, silent=False, message="Could not delete temporary file")
