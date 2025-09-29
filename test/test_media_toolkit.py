@@ -242,11 +242,11 @@ class TestFileConversionUtilities:
     def test_media_from_file(self):
         """Test media_from_file function."""
         # Test with existing audio file
-        audio_file = media_from_file(f"{test_files_dir}test_audio.wav")
+        audio_file = media_from_any(f"{test_files_dir}test_audio.wav")
         assert isinstance(audio_file, AudioFile)
         
         # Test with existing video file
-        video_file = media_from_file(f"{test_files_dir}test_video.mp4")
+        video_file = media_from_any(f"{test_files_dir}test_video.mp4")
         assert isinstance(video_file, VideoFile)
 
     def test_media_from_any_file_path(self):

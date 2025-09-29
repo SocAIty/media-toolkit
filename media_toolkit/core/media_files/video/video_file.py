@@ -47,18 +47,6 @@ class VideoFile(MediaFile):
         return self._video_info
 
     @property
-    def audio(self) -> Optional[AudioFile]:
-        """Extracts the audio stream into an AudioFile object."""
-        try:
-            audio_bytes = self.extract_audio(export_type='aac')
-            if audio_bytes:
-                return AudioFile().from_bytes(audio_bytes)
-        except (ValueError, RuntimeError):
-            # Handles cases with no audio stream or extraction errors
-            return None
-        return None
-
-    @property
     def video_info(self) -> VideoInfo:
         if self._video_info is not None:
             return self._video_info
@@ -128,15 +116,22 @@ class VideoFile(MediaFile):
         try:
             container = av.open(temp_video_path, mode="w", format="mp4")
 
-            rate = frame_rate
-            if isinstance(rate, float):
-                rate = Fraction(rate).limit_denominator(10000)
+            # Convert frame rate to proper format
+            if isinstance(frame_rate, float):
+                # Use a common time base like 1/1000 for millisecond precision
+                time_base = Fraction(1, 1000)
+                rate = int(frame_rate * 1000)  # Convert to milliseconds
+            else:
+                time_base = Fraction(1, frame_rate)
+                rate = frame_rate
 
             v_stream = container.add_stream('libx264', rate=rate)
             v_stream.width = width
             v_stream.height = height
             v_stream.pix_fmt = px_fmt or 'yuv420p'
+            v_stream.time_base = time_base
 
+            frame_pts = 0
             for frame_nd in rebuilt_frame_iter():
                 if frame_nd is None:
                     continue
@@ -147,9 +142,15 @@ class VideoFile(MediaFile):
                 if frame_nd.dtype != np.uint8:
                     frame_nd = np.asarray(frame_nd).astype(np.uint8)
                 frame = av.VideoFrame.from_ndarray(frame_nd, format=color_format)
-                frame.pts = None
+                frame.pts = frame_pts
+                frame.time_base = time_base
                 for packet in v_stream.encode(frame):
                     container.mux(packet)
+                # For float frame rates, increment by millisecond intervals
+                if isinstance(frame_rate, float):
+                    frame_pts += int(1000 / frame_rate)
+                else:
+                    frame_pts += 1
 
             for packet in v_stream.encode():
                 container.mux(packet)
@@ -449,41 +450,46 @@ class VideoFile(MediaFile):
             raise ValueError("VideoStream object must contain video_info")
         
         # --- VIDEO WRITER SETUP (Smart Re-encode) ---
-        
-        rate = video_info.frame_rate
+        in_vstream = stream._video_stream
+
+        rate = in_vstream.average_rate or video_info.frame_rate
         if isinstance(rate, float):
             rate = Fraction(rate).limit_denominator(10000)
 
         # 1. Video Codec Selection & Setup
         # Try to use the original codec if it's a standard encoding one (e.g., h264/h265)
-        video_codec = video_info.video_codec if video_info.video_codec in ('libx264', 'h264', 'hevc', 'libx265') else 'libx264'
+        video_codec = in_vstream.codec_context.codec.name if in_vstream.codec_context.codec.name in ('libx264', 'h264', 'hevc', 'libx265') else 'libx264'
         
         v_writer = container.add_stream(video_codec, rate=rate)
-        v_writer.width = video_info.width
-        v_writer.height = video_info.height
-        v_writer.pix_fmt = video_info.pix_fmt or 'yuv420p'
+        v_writer.width = in_vstream.width
+        v_writer.height = in_vstream.height
+        v_writer.pix_fmt = in_vstream.pix_fmt or 'yuv420p'
         
         # Set Bit Rate or CRF for size/quality control
-        if video_info.video_bit_rate:
-            v_writer.bit_rate = video_info.video_bit_rate  # Use .bit_rate property for setting rate
+        if in_vstream.bit_rate:
+            v_writer.bit_rate = in_vstream.bit_rate
         else:
             v_writer.options['crf'] = '23'  # Standard default CRF for H.264/265
+        if in_vstream.time_base is not None:
+            v_writer.time_base = in_vstream.time_base
             
         # --- AUDIO WRITER SETUP (Smart Re-encode) ---
         
         a_writer = None
-        if stream.has_audio and stream._audio_stream and video_info.audio_sample_rate:            
-            # 1. Audio Codec Selection & Setup: Prefer original or fallback to 'aac'
-            audio_codec = video_info.audio_codec if video_info.audio_codec and video_info.audio_codec != 'raw' else 'aac'
+        if stream.has_audio and stream._audio_stream:
+            in_astream = stream._audio_stream
             
-            # The FIX for the TypeError: Must pass the codec name explicitly!
-            a_writer = container.add_stream(audio_codec)
+            # 1. Audio Codec Selection & Setup: Prefer original or fallback to 'aac' for broad compatibility
+            # Re-encode raw audio formats to 'aac'
+            audio_codec = in_astream.codec_context.codec.name if in_astream.codec_context.codec.name not in ('pcm_s16le', 'raw') else 'aac'
             
-            # Apply known properties (like sample rate and layout) from the original
-            a_writer.rate = video_info.audio_sample_rate
-            # Fallback to stereo if layout is unknown/missing
-            layout = 'stereo' if video_info.audio_channels == 2 else 'mono'
-            a_writer.layout = layout
+            a_writer = container.add_stream(audio_codec, rate=in_astream.sample_rate, layout=in_astream.layout.name)
+            
+            # Apply known properties from the original stream
+            if in_astream.bit_rate:
+                a_writer.bit_rate = in_astream.bit_rate
+            if in_astream.time_base is not None:
+                a_writer.time_base = in_astream.time_base
 
         # --- MUXING ---
 

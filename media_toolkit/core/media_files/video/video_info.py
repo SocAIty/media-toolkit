@@ -2,6 +2,8 @@ from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 from fractions import Fraction
 
+from media_toolkit.core.media_files.audio.audio_info import AudioInfo
+
 
 @dataclass
 class VideoInfo:
@@ -14,9 +16,7 @@ class VideoInfo:
     pix_fmt: str = None
     video_codec: str = None          # e.g., 'h264', 'hevc'
     video_bit_rate: int = None       # e.g., 5000000 (bits/s)
-    audio_sample_rate: int = None
-    audio_channels: int = None
-    audio_codec: str = None
+    audio_info: Optional[AudioInfo] = None
 
     def __post_init__(self):
         self._derive_missing()
@@ -85,11 +85,26 @@ def _probe_pyav(file_path: str) -> Dict[str, Any]:
                 "video_bit_rate": _safe_int(getattr(v, "bit_rate", None)),
             }
             if a:
-                result.update({
-                    "audio_sample_rate": _safe_int(getattr(a, "sample_rate", None)),
-                    "audio_channels": _safe_int(getattr(a, "channels", None)),
-                    "audio_codec": getattr(a, "name", None),
-                })
+                duration = None
+                if getattr(a, 'duration', None) and getattr(a, 'time_base', None):
+                    duration = float(a.duration * a.time_base)
+                elif getattr(c, 'duration', None):
+                    duration = float(c.duration / 1_000_000)
+
+                codec_name = None
+                try:
+                    codec_name = getattr(getattr(a, 'codec_context', None), 'name', None) or getattr(a, 'name', None)
+                except Exception:
+                    pass
+                
+                result["audio"] = AudioInfo(
+                    sample_rate=_safe_int(getattr(a, "sample_rate", None)),
+                    channels=_safe_int(getattr(a, "channels", None)),
+                    duration=duration,
+                    codec_name=codec_name,
+                    layout=getattr(a, 'layout.name', 'unknown'),
+                    bit_rate=_safe_int(getattr(a, "bit_rate", None))
+                )
             return result
     except Exception:
         return {}
@@ -110,11 +125,11 @@ def _probe_mediainfo(file_path: str) -> Dict[str, Any]:
         }
         # Add audio info if present
         if info.get("sample_rate"):
-            result.update({
-                "audio_sample_rate": _safe_int(info.get("sample_rate")),
-                "audio_channels": _safe_int(info.get("channels")),
-                "audio_codec": info.get("codec_name"),
-            })
+            result["audio"] = AudioInfo(
+                sample_rate=_safe_int(info.get("sample_rate")),
+                channels=_safe_int(info.get("channels")),
+                codec_name=info.get("codec_name")
+            )
         return result
     except Exception:
         return {}

@@ -196,7 +196,8 @@ class AudioFile(MediaFile):
 
                 a_frame = av.AudioFrame.from_ndarray(flat_chunk, format='s16', layout=layout)
                 a_frame.sample_rate = sample_rate
-                a_frame.pts = None
+                a_frame.pts = audio_pts
+                a_frame.time_base = Fraction(1, sample_rate)
                 for packet in a_stream.encode(a_frame):
                     container.mux(packet)
                 audio_pts += (end - start)

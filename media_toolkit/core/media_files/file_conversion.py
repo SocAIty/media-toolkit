@@ -196,6 +196,25 @@ def media_from_any(
     if isinstance(data, IMediaFile):
         return data
 
+    # Handle file paths directly to preserve path for probing
+    if isinstance(data, str) and is_valid_file_path(data):
+        if not allow_reads_from_disk:
+            raise ValueError("Reading from disk is not allowed.")
+
+        target_class_name = None
+        if type_hint:
+            target_class_name = _interpret_type_hint(type_hint)
+
+        if not target_class_name:
+            try:
+                target_class_name, _, _ = PureMagicContentDetector.detect_from_path(data)
+            except Exception:
+                target_class_name = 'MediaFile'
+
+        target_class = _resolve_media_class(target_class_name)
+        instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
+        return instance.from_file(data)
+
     # Handle numpy arrays specially
     if is_numpy_array_like(data):
         return media_from_numpy(data, type_hint, use_temp_file, temp_dir)

@@ -119,6 +119,43 @@ class PureMagicContentDetector:
         return 'MediaFile', 'application/octet-stream', None
     
     @classmethod
+    def detect_from_path(cls, file_path: str) -> Tuple[str, str, Optional[str]]:
+        """
+        Detect content type from file path using puremagic.
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            Tuple of (media_class_name, content_type, file_extension)
+        """
+        try:
+            matches = puremagic.magic_file(file_path)
+            
+            if not matches:
+                return 'MediaFile', 'application/octet-stream', None
+
+            best_match = matches[0]
+            extension = best_match.extension.lower().replace('.', '') if best_match.extension else None
+            mime_type = best_match.mime_type if hasattr(best_match, 'mime_type') else None
+            
+            media_class = cls._EXTENSION_TO_CLASS.get(extension, 'MediaFile')
+            
+            if mime_type:
+                content_type = mime_type
+            elif extension:
+                content_type = cls._extension_to_mime_type(extension)
+            else:
+                content_type = 'application/octet-stream'
+                
+            return media_class, content_type, extension
+                
+        except Exception:
+            pass
+            
+        return 'MediaFile', 'application/octet-stream', None
+
+    @classmethod
     def detect_from_buffer(cls, buffer: Union[io.BytesIO, bytes]) -> Tuple[str, str, Optional[str]]:
         """
         Detect content type from bytes or buffer using puremagic.
