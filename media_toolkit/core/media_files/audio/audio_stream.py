@@ -23,6 +23,7 @@ class AudioStream:
         self._closed = False
 
     def frames(self, output_format: Literal["numpy", "av"] = "numpy") -> Iterator[Union[av.AudioFrame, np.ndarray]]:
+        self.container.seek(0)
         for frame in self.container.decode(self._audio_stream):
             if output_format == "numpy":
                 yield frame.to_ndarray()
@@ -30,6 +31,7 @@ class AudioStream:
                 yield frame
 
     def __iter__(self):
+        self.reset()
         self._iter_gen = self.frames(output_format="numpy")
         return self
 
@@ -37,6 +39,14 @@ class AudioStream:
         if self._iter_gen is None:
             self._iter_gen = self.frames(output_format="numpy")
         return next(self._iter_gen)
+
+    def reset(self):
+        """Reset demux/decoding to the start of the container."""
+        try:
+            self.container.seek(0)
+            self._iter_gen = None
+        except Exception:
+            pass
 
     @property
     def sample_rate(self) -> Optional[int]:
