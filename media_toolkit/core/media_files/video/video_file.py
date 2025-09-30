@@ -197,7 +197,6 @@ class VideoFile(MediaFile):
                 output_format=audio_output_format,
                 codec=audio_codec, array_layout="av"
             )
-
             self.add_audio(audio_file)
         
         return self

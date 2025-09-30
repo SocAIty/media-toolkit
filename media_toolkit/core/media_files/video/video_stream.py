@@ -64,6 +64,7 @@ class VideoStream:
         color_format: Literal["rgb24", "bgr24"] = "bgr24",
     ) -> Iterator[Union[av.VideoFrame, np.ndarray]]:
         """Yield decoded video frames as numpy arrays or av.VideoFrame."""
+        self.container.seek(0)
         for frame in self.container.decode(self._video_stream):
             if output_format == "numpy":
                 yield frame.to_ndarray(format=color_format)
@@ -80,6 +81,8 @@ class VideoStream:
         """
         if self._audio_stream is None:
             return
+        
+        self.container.seek(0)
         for frame in self.container.decode(self._audio_stream):
             if output_format == "numpy":
                 yield frame.to_ndarray()
@@ -91,6 +94,7 @@ class VideoStream:
         """
         Iterate over video frames as numpy arrays by default in bgr24 format
         """
+        self.reset()
         self._iter_gen = self.video_frames(output_format="numpy", color_format="bgr24")
         return self
 

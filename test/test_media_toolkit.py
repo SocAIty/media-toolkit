@@ -167,7 +167,7 @@ class TestExistingFunctionality:
             if i >= n_frames:
                 break
             video_frames.append(img)
-#
+
         audio_frames = stream.audio_frames(output_format="av")
         end_time = time.time()
         fps = n_frames / (end_time - start_time)
@@ -387,30 +387,30 @@ def run_all_tests():
     # Run existing functionality tests
     existing_tests = TestExistingFunctionality()
     
-    #existing_tests.test_img_from_url()
-    #print("✓ Image from URL test passed")
-# #
-    #existing_tests.test_img_from_file_to_np_array()
-    #print("✓ Image from file to np array test passed")
-# #
-    #existing_tests.test_audio_file()
-    #print("✓ Audio file test passed")
-    #
-    #existing_tests.test_audio_stream()
-    #print("✓ Audio stream test passed")
-#
-    #existing_tests.test_audio_from_av_packages()
-    #print("✓ Audio from av packages test passed")
-#
-    #existing_tests.test_video_file()
-    #print("✓ Video file test passed")
-    #
-    #existing_tests.test_video_from_files()
-    #print("✓ Video from files test passed")
-    #
-    #existing_tests.test_video_stream()
-    #print("✓ Video stream test passed")
-#
+    existing_tests.test_img_from_url()
+    print("✓ Image from URL test passed")
+# 
+    existing_tests.test_img_from_file_to_np_array()
+    print("✓ Image from file to np array test passed")
+# 
+    existing_tests.test_audio_file()
+    print("✓ Audio file test passed")
+    
+    existing_tests.test_audio_stream()
+    print("✓ Audio stream test passed")
+
+    existing_tests.test_audio_from_av_packages()
+    print("✓ Audio from av packages test passed")
+
+    existing_tests.test_video_file()
+    print("✓ Video file test passed")
+    
+    existing_tests.test_video_from_files()
+    print("✓ Video from files test passed")
+    
+    existing_tests.test_video_stream()
+    print("✓ Video stream test passed")
+
     existing_tests.test_video_to_audio_stream()
     print("✓ Video to audio stream test passed")
     
