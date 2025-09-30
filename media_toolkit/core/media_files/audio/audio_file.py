@@ -1,9 +1,10 @@
+import os
 import io
 from fractions import Fraction
 from typing import Optional, Union, List, Literal, Tuple, Iterator
 
 from media_toolkit.core.media_files.audio.audio_stream import AudioStream
-from media_toolkit.core.media_files.audio.audio_info import AudioInfo, get_audio_info
+from media_toolkit.core.media_files.audio.audio_info import AudioInfo, get_audio_info, get_valid_format_codec_ext_combination
 from media_toolkit.utils.dependency_requirements import requires
 from media_toolkit.core.media_files.media_file import MediaFile
 from media_toolkit.utils.generator_wrapper import SimpleGeneratorWrapper
@@ -104,8 +105,9 @@ class AudioFile(MediaFile):
         self,
         np_array: Union[np.ndarray, List[np.ndarray], Tuple[np.ndarray, ...]],
         sample_rate: int = 44100,
-        file_type: str = "wav",
-        input_layout: Literal["pyav", "soundfile"] = "pyav",
+        audio_format: str = "wav",
+        codec: str = "pcm_s16le",
+        array_layout: Literal["av", "soundfile"] = "av",
     ):
         """
         Create AudioFile from numpy array(s) with specified parameters using PyAV.
@@ -116,7 +118,7 @@ class AudioFile(MediaFile):
                 - For input_layout="soundfile": shape (samples,) or (samples, channels)
             sample_rate: Sample rate (default: 44100 Hz)
             file_type: Audio format (default: "wav")
-            input_layout: Indicates the orientation of input arrays
+            array_layout: Indicates the orientation of input arrays
             
         Returns:
             Self for method chaining
@@ -126,7 +128,7 @@ class AudioFile(MediaFile):
         # Normalize inputs into a single 2D array: (channels, samples)
         def normalize_to_channels_first(arr_like) -> np.ndarray:
             arr = np.asarray(arr_like)
-            if input_layout == "soundfile":
+            if array_layout == "soundfile":
                 # (samples,) or (samples, channels) -> (channels, samples)
                 if arr.ndim == 1:
                     arr = arr.reshape(-1, 1)
@@ -163,23 +165,13 @@ class AudioFile(MediaFile):
         total_samples = int(audio_cf.shape[1])
 
         # Choose codec based on file_type
-        codec_map = {
-            'wav': 'pcm_s16le',
-            'wave': 'pcm_s16le',
-            'mp3': 'mp3',
-            'flac': 'flac',
-            'ogg': 'vorbis',
-            'aac': 'aac',
-            'm4a': 'aac',
-        }
-        normalized_ft = (file_type or 'wav').lower()
-        codec_name = codec_map.get(normalized_ft, 'pcm_s16le')
+        format, codec, ext = get_valid_format_codec_ext_combination(audio_format, codec)
         layout = 'stereo' if channels == 2 else 'mono'
 
         buffer = io.BytesIO()
-        container = av.open(buffer, mode='w', format=normalized_ft)
+        container = av.open(buffer, mode='w', format=format)
         try:
-            a_stream = container.add_stream(codec_name, rate=sample_rate, layout=layout)
+            a_stream = container.add_stream(codec, rate=sample_rate, layout=layout)
             a_stream.time_base = Fraction(1, sample_rate)
 
             # Encode in moderately sized chunks
@@ -212,7 +204,7 @@ class AudioFile(MediaFile):
         self.from_bytes(buffer.getvalue())
 
         # Set content type based on format
-        self.content_type = f"audio/{self._normalize_audio_format(file_type)}"
+        self.content_type = f"audio/{ext}"
         self._audio_info = AudioInfo(sample_rate=sample_rate, channels=channels)
         return self
 
@@ -221,8 +213,9 @@ class AudioFile(MediaFile):
         self,
         audio_generator: Union[Iterator, List],
         sample_rate: int = 44100,
-        file_type: str = "wav",
-        input_layout: Literal["pyav", "soundfile"] = "pyav",
+        output_format: str = "wav",
+        codec: str = "pcm_s16le",
+        array_layout: Literal["av", "soundfile"] = "av",
     ) -> 'AudioFile':
         """
         Create AudioFile from an iterator of audio chunks using existing from_np_array.
@@ -231,24 +224,32 @@ class AudioFile(MediaFile):
             audio_generator: Iterator/list of numpy arrays representing audio chunks
             sample_rate: Target sample rate
             file_type: Target audio file type (e.g., 'wav', 'mp3', 'aac')
-            input_layout: Orientation of arrays; see from_np_array
+            array_layout: Orientation of arrays; choose "soundfile" if the np.array stem from the soundfile library
 
         Returns:
             Self for method chaining
         """
+        frames: List[av.AudioFrame] = []
         chunks: List[np.ndarray] = []
         for chunk in SimpleGeneratorWrapper(audio_generator):
             if chunk is None:
                 continue
+            if isinstance(chunk, av.AudioFrame):
+                frames.append(chunk)
+                continue
+            
             arr = np.asarray(chunk)
             if arr.size == 0:
                 continue
             chunks.append(arr)
 
-        if len(chunks) == 0:
-            raise ValueError("audio_generator produced no audio chunks")
+        if len(chunks) == 0 and len(frames) == 0:
+            raise ValueError("audio_generator produced no audio chunks or frames")
 
-        return self.from_np_array(chunks, sample_rate=sample_rate, file_type=file_type, input_layout=input_layout)
+        if len(frames) > 0:
+            return self.from_av_audio_frames(frames, output_format=output_format, codec=codec)
+
+        return self.from_np_array(chunks, sample_rate=sample_rate, audio_format=output_format, array_layout=array_layout, codec=codec)
 
     @requires('av')
     def to_stream(self) -> AudioStream:
@@ -261,31 +262,36 @@ class AudioFile(MediaFile):
         return AudioStream(buf)
 
     @requires('av')
-    def from_stream(self, stream: 'AudioStream', file_type: str = "wav"):
+    def from_stream(self, stream: 'AudioStream', output_format: str = "wav", codec: str = "pcm_s16le"):
         """
         Creates an AudioFile from an AudioStream by re-encoding into a new container.
-
         Args:
             stream: The input AudioStream.
-            file_type: The output audio format (e.g., 'wav', 'mp3'). Defaults to 'wav'.
+            output_format: The output audio format (e.g., 'wav', 'mp3'). Defaults to 'wav'.
+            codec: Codec to use for encoding.
         """
         if not isinstance(stream, AudioStream):
             raise TypeError("Input must be an AudioStream object.")
 
         buffer = io.BytesIO()
         
-        codec_map = {
-            'wav': 'pcm_s16le', 'wave': 'pcm_s16le', 'mp3': 'mp3',
-            'flac': 'flac', 'ogg': 'vorbis', 'aac': 'aac', 'm4a': 'aac',
-        }
-        codec_name = codec_map.get(file_type.lower(), 'pcm_s16le')
+        fmt, codec, ext = get_valid_format_codec_ext_combination(output_format, codec)
 
-        output_container = av.open(buffer, mode='w', format=file_type)
+        output_container = av.open(buffer, mode='w', format=fmt)
         try:
             in_stream = stream._audio_stream
-            layout = in_stream.layout.name
-            rate = in_stream.sample_rate
-            out_stream = output_container.add_stream(codec_name, rate=rate, layout=layout)
+
+            # Determine a safe channel layout for the output.
+            # Many codecs (like mp3) only support mono or stereo, so we downmix if necessary.
+            channels = in_stream.channels or 1
+            layout = "stereo" if channels >= 2 else "mono"
+            
+            # Add the output stream with the determined layout and sample rate.
+            out_stream = output_container.add_stream(codec, rate=in_stream.sample_rate, layout=layout)
+            
+            # Set bit_rate if available from the source, important for compressed formats.
+            if in_stream.bit_rate:
+                out_stream.bit_rate = in_stream.bit_rate
 
             for frame in stream.frames(output_format='av'):
                 for packet in out_stream.encode(frame):
@@ -298,7 +304,81 @@ class AudioFile(MediaFile):
             output_container.close()
         
         self.from_bytes(buffer.getvalue())
-        self.content_type = f"audio/{self._normalize_audio_format(file_type)}"
+        self.content_type = f"audio/{ext}"
+        return self
+    
+    def from_av_audio_frames(self, frames: Union[List[av.AudioFrame], Iterator[av.AudioFrame]], output_format: str = "wav", codec: str = "pcm_s16le"):
+        """
+        Creates an AudioFile from a list of av.AudioFrame objects.
+
+        Args:
+            frames: List or iterator of av.AudioFrame objects
+            output_format: Output format (wav, mp3, m4a, etc.)
+            codec: Codec to use for encoding
+            sample_rate: Sample rate for the output audio (will use frame's sample rate if not provided)
+        """
+        container_format, codec, _ = get_valid_format_codec_ext_combination(output_format, codec)
+
+        buffer = io.BytesIO()
+        output_container = av.open(buffer, mode='w', format=container_format)
+
+        # Convert to list if it's an iterator to peek at first frame
+        if not isinstance(frames, list):
+            frames = list(frames)
+
+        if not frames:
+            raise ValueError("No audio frames provided")
+
+        # Extract properties from first frame
+        first_frame = frames[0]
+        sample_rate = first_frame.sample_rate
+
+        channels = getattr(first_frame, 'channels', 1)
+        layout = 'stereo' if channels >= 2 else 'mono'
+
+        output_stream = output_container.add_stream(codec, rate=sample_rate, layout=layout)
+
+        # Process all frames - encode them directly without modification
+        # The frames should already have correct properties from the decoder
+        for frame in frames:
+            for packet in output_stream.encode(frame):
+                output_container.mux(packet)
+
+        # Flush encoder
+        for packet in output_stream.encode():
+            output_container.mux(packet)
+
+        output_container.close()
+
+        self.from_bytes(buffer.getvalue())
+        return self
+
+    def from_av_packages(self, packages: Union[List[av.Packet], Iterator[av.Packet]], output_format: str = "wav", codec: str = "pcm_s16le", sample_rate: int = 44100):
+        """
+        Creates an AudioFile from a list of av.Packet objects.
+
+        Args:
+            packages: List or iterator of av.Packet objects
+            output_format: Output format (wav, mp3, m4a, etc.)
+            codec: Codec to use for encoding
+            sample_rate: Sample rate for the output audio
+        """
+        container_format, codec, _ = get_valid_format_codec_ext_combination(output_format, codec)
+
+        buffer = io.BytesIO()
+        output_container = av.open(buffer, mode='w', format=container_format)
+        output_stream = output_container.add_stream(codec, rate=sample_rate)
+
+        for packet in packages:
+            output_container.mux(packet)
+
+        # Flush encoder
+        for packet in output_stream.encode():
+            output_container.mux(packet)
+
+        output_container.close()
+
+        self.from_bytes(buffer.getvalue())
         return self
 
     def _file_info(self):
@@ -313,7 +393,8 @@ class AudioFile(MediaFile):
         self._audio_info = get_audio_info(self)
         if self.audio_info.is_valid:
             if self.content_type is None and self.audio_info.codec_name:
-                self.content_type = f"audio/{self._normalize_audio_format(self.audio_info.codec_name)}"
+                _, _, ext = get_valid_format_codec_ext_combination(self.audio_info.codec_name)
+                self.content_type = f"audio/{ext}"
         else:
             # Fallback: decode quickly to get duration if probe failed
             try:
@@ -371,23 +452,26 @@ class AudioFile(MediaFile):
         """Check if audio is stereo (two channels)."""
         return self.channels == 2
 
-    def _get_audio_format(self) -> str:
-        """Get current audio format from content type."""
-        if self.content_type and self.content_type.startswith('audio/'):
-            return self.content_type.split('/')[-1]
-        return 'wav'  # Default
+    def save(self, path: str = None):
+        """
+        Save to disk with file conversion and automatic directory creation
+        
+        Args:
+            path: Target path (directory or full path).
+                If the extension is different from the current extension, the file will be re-encoded.
+        """
+        ext = os.path.splitext(path)[1]
+        if ext is None or ext == "":
+            ext = self.extension
+    
+        ft, codec, valid_ext = get_valid_format_codec_ext_combination(ext)
 
-    def _normalize_audio_format(self, file_type: str) -> str:
-        """Normalize audio format names for content type."""
-        format_mappings = {
-            'mp3': 'mpeg',
-            'aac': 'aac',
-            'ogg': 'ogg',
-            'flac': 'flac',
-            'wav': 'wav',
-            'wave': 'wav',
-            'aiff': 'aiff',
-            'wma': 'x-ms-wma',
-            'mp3': 'mpeg',
-        }
-        return format_mappings.get(file_type.lower(), file_type.lower())
+        # compare coded to own codec. If different re-encode
+        if self.audio_info is not None and self.audio_info.codec_name != codec:
+            self.from_stream(self.to_stream(), output_format=ft, codec=codec)
+        else:
+            if valid_ext != self.extension:
+                # we need to re-encode the file
+                self.from_stream(self.to_stream(), output_format=ft, codec=codec)
+
+        super().save(path)

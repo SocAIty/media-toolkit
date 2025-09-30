@@ -11,6 +11,7 @@ from media_toolkit.utils.dependency_requirements import requires
 from .video_info import VideoInfo, get_video_info
 from media_toolkit.utils.generator_wrapper import SimpleGeneratorWrapper
 
+
 try:
     import numpy as np
 except ImportError:
@@ -170,9 +171,10 @@ class VideoFile(MediaFile):
         frame_generator: Union[Iterator, list],
         audio_generator: Optional[Union[Iterator, list]] = None,
         frame_rate: int = 30,
-        audio_sample_rate: int = 44100,
-        px_fmt: str = "yuv420p",
-        audio_type: str = "wav",
+        px_fmt: str = None,
+        audio_sample_rate: int = None,
+        audio_output_format: str = None,
+        audio_codec: str = None,
     ) -> 'VideoFile':
         """
         Creates a new VideoFile from separate generators for video frames and audio data.
@@ -190,7 +192,12 @@ class VideoFile(MediaFile):
         # If audio is provided, build an AudioFile and mux it using existing add_audio
         if audio_generator is not None:
             # Normalize audio chunks (support list or iterator of numpy arrays)
-            audio_file = AudioFile().from_audio_generator(audio_generator, sample_rate=audio_sample_rate, file_type=audio_type, input_layout="pyav")
+            audio_file = AudioFile().from_audio_generator(
+                audio_generator, sample_rate=audio_sample_rate,
+                output_format=audio_output_format,
+                codec=audio_codec, array_layout="av"
+            )
+
             self.add_audio(audio_file)
         
         return self
@@ -344,22 +351,47 @@ class VideoFile(MediaFile):
                 video_duration = float(video_stream.duration * video_stream.time_base)
 
                 # Video Stream: Copy properties, re-encode to 'libx264' for broad compatibility
-                output_video_stream = output_container.add_stream('libx264', rate=video_stream.average_rate)
+                pix_fmt = 'yuv420p'  # Common for H.264
+                codec = 'libx264'
+                if hasattr(video_stream, 'codec_context') and hasattr(video_stream.codec_context, 'codec'):
+                    codec = video_stream.codec_context.codec.name
+              
+                if hasattr(video_stream, 'pix_fmt'):
+                    pix_fmt = video_stream.pix_fmt
+
+                output_video_stream = output_container.add_stream(codec_name=codec, rate=video_stream.average_rate)
                 output_video_stream.width = video_stream.width
                 output_video_stream.height = video_stream.height
-                output_video_stream.pix_fmt = 'yuv420p'  # Common for H.264
+                output_video_stream.pix_fmt = pix_fmt
                 
                 # Audio Stream: Re-encode to 'aac'.
-                OUTPUT_SAMPLE_RATE = 44100
-                OUTPUT_LAYOUT = 'stereo'  # Use stereo as a standard
-                
-                output_audio_stream = output_container.add_stream('aac', rate=OUTPUT_SAMPLE_RATE, layout=OUTPUT_LAYOUT)
+                audio_codec = 'aac'
+                layout = 'stereo'  # Use stereo as a standard
+                sample_rate = 44100
+                if hasattr(input_audio_stream, 'codec_context'):
+                    if hasattr(input_audio_stream.codec_context, 'channels'):
+                        layout_map = {
+                            1: 'mono',
+                            2: 'stereo',
+                            3: '2.1',
+                            4: '3.1',
+                            5: '4.1',
+                            6: '5.1',
+                            7: '6.1',
+                            8: '7.1'
+                        }
+                        channels = input_audio_stream.codec_context.channels
+                        layout = layout_map.get(channels, 'stereo')
+                    if hasattr(input_audio_stream.codec_context, 'rate'):
+                        sample_rate = input_audio_stream.codec_context.rate
+                      
+                output_audio_stream = output_container.add_stream(codec_name=audio_codec, rate=sample_rate, layout=layout)
 
                 # Create an Audio Resampler
                 resampler = av.AudioResampler(
                     format='fltp',  # Preferred float format for encoding
-                    layout=OUTPUT_LAYOUT,
-                    rate=OUTPUT_SAMPLE_RATE,
+                    layout=layout,
+                    rate=sample_rate
                 )
 
                 # --- Muxing & Transcoding ---
@@ -384,7 +416,6 @@ class VideoFile(MediaFile):
                                 output_container.mux(packet)
 
                 # Flush the encoders
-                
                 # 1. Flush the video encoder
                 for packet in output_video_stream.encode():
                     output_container.mux(packet)
@@ -404,6 +435,7 @@ class VideoFile(MediaFile):
             
         except Exception as e:
             # Clean up temporary file on failure
+            print(e)
             self._safe_remove(temp_output_path)
             raise RuntimeError(f"Failed to add audio to video: {e}") from e
         finally:

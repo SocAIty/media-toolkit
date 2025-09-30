@@ -300,8 +300,10 @@ class UniversalFile(IMediaFile):
                 print(f"No filename given. Using {self.file_name}")
             path = os.path.join(path, self.file_name)
 
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-
+        dir_name = os.path.dirname(path)
+        if dir_name is not None and dir_name != "":
+            os.makedirs(dir_name, exist_ok=True)
+            
         with open(path, 'wb') as file:
             file.write(self.read())
 

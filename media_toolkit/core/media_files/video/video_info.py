@@ -97,7 +97,7 @@ def _probe_pyav(file_path: str) -> Dict[str, Any]:
                 except Exception:
                     pass
                 
-                result["audio"] = AudioInfo(
+                result["audio_info"] = AudioInfo(
                     sample_rate=_safe_int(getattr(a, "sample_rate", None)),
                     channels=_safe_int(getattr(a, "channels", None)),
                     duration=duration,
@@ -125,7 +125,7 @@ def _probe_mediainfo(file_path: str) -> Dict[str, Any]:
         }
         # Add audio info if present
         if info.get("sample_rate"):
-            result["audio"] = AudioInfo(
+            result["audio_info"] = AudioInfo(
                 sample_rate=_safe_int(info.get("sample_rate")),
                 channels=_safe_int(info.get("channels")),
                 codec_name=info.get("codec_name")
