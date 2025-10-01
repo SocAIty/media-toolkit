@@ -41,13 +41,12 @@ class GeneratorWrapper:
         else:
             self._length = None
 
+        # Add length property for compatibility with objects that expect __len__
+        if self._length is not None:
+            self.__len__ = lambda: self._length
+
         self._count = 0
         self._iterator = None
-
-    def __len__(self):
-        if self._length is None:
-            raise TypeError("Length not available for this iterable")
-        return self._length
 
     def __iter__(self):
         # Create fresh iterator each time

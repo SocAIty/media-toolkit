@@ -93,26 +93,7 @@ class VideoFile(MediaFile):
         """
         Encode video frames from a generator into this VideoFile using PyAV.
         """
-        frames_iter_wrapper = SimpleGeneratorWrapper(frame_generator)
-        gen = iter(frames_iter_wrapper)
-
-        # Peek a first valid frame for dimensions
-        first_frame = None
-        try:
-            while first_frame is None:
-                first_frame = next(gen)
-        except StopIteration:
-            raise ValueError("frame_generator produced no frames")
-
-        def rebuilt_frame_iter():
-            yield first_frame
-            for f in gen:
-                if f is None:
-                    continue
-                yield f
-
-        height, width = first_frame.shape[0], first_frame.shape[1]
-
+        gen = SimpleGeneratorWrapper(frame_generator)
         temp_video_path = tempfile.mktemp(suffix=".mp4")
         try:
             container = av.open(temp_video_path, mode="w", format="mp4")
@@ -127,15 +108,25 @@ class VideoFile(MediaFile):
                 rate = frame_rate
 
             v_stream = container.add_stream('libx264', rate=rate)
-            v_stream.width = width
-            v_stream.height = height
+        
             v_stream.pix_fmt = px_fmt or 'yuv420p'
             v_stream.time_base = time_base
 
             frame_pts = 0
-            for frame_nd in rebuilt_frame_iter():
+            for i, frame_nd in enumerate(gen):
+                # peek a first valid frame for dimensions
+                if isinstance(frame_nd, MediaFile):
+                    frame_nd = frame_nd.to_np_array()
+                
+                if i == 0:
+                    if frame_nd is None:
+                        raise ValueError("frame_generator produced no frames")
+                    v_stream.width = frame_nd.shape[1]
+                    v_stream.height = frame_nd.shape[0]
+
                 if frame_nd is None:
                     continue
+
                 if frame_nd.ndim == 2:
                     frame_nd = np.stack([frame_nd] * 3, axis=-1)
                 if frame_nd.shape[-1] == 4:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "media-toolkit"
-version = "00.02.17"
+version = "00.02.18"
 description = "Web-ready standardized file processing and serialization. Read, load and convert to standard file types with a common interface."
 requires-python = ">=3.8"
 authors = [
@@ -16,7 +16,7 @@ dependencies = [
     "numpy>=1.18.0",
     "puremagic>=1.29.0",
     "opencv-python>=4.2",
-    "av"
+    "av>=15.1.0"
     "tqdm",
     "httpx"
 ]
