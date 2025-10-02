@@ -1,6 +1,6 @@
 import io
 from typing import List, Union, Optional, Any, TypeVar, Generic
-from media_toolkit.core.media_files import IMediaFile, MediaFile, media_from_any, media_from_FileModel
+from media_toolkit.core.media_files import IMediaFile, MediaFile, media_from_any
 from media_toolkit.core.media_containers.i_media_container import IMediaContainer
 import os
 
@@ -108,7 +108,7 @@ class MediaList(IMediaContainer, Generic[T]):
             
         if MediaFile._is_file_model(file):
             try:
-                processed_file = media_from_FileModel(file, allow_reads_from_disk=self.read_system_files)
+                processed_file = media_from_any(file, allow_reads_from_disk=self.read_system_files)
                 self._media_files.append(processed_file)
                 return processed_file
             except Exception:
@@ -291,18 +291,50 @@ class MediaList(IMediaContainer, Generic[T]):
 
         return tuples
 
-    def save(self, directory: Optional[str] = None):
+    def save(self, path: Optional[str] = None):
         """
-        Save all files to a specified directory.
+        Save all media files in the list to a specified location.
 
         Args:
-            directory: Target directory. Uses current directory if None.
-        """
-        directory = directory or os.path.curdir
-        os.makedirs(directory, exist_ok=True)
+            path: Target directory path or file path pattern. Uses current directory if None or empty.
+                 If path contains a file extension, all files will use that base name with their
+                 respective extensions. If path has no extension, each file retains its original name.
 
-        for file in self._media_files:
-            file.save(os.path.join(directory, file.file_name))
+        Behavior:
+            - Creates the target directory if it doesn't exist
+            - Handles filename conflicts by appending numbers (_1, _2, etc.) to duplicates
+            - Preserves original file extensions for each media file
+            - If path includes filename, applies that name to all files with their extensions
+            - If path is just a directory, each file keeps its original filename
+
+        Example:
+            save("/tmp/videos") - saves each file with its original name in /tmp/videos/
+            save("/tmp/output.mp4") - saves all files as "output.extension" in /tmp/
+        """
+        if path is None or path == "":
+            path = os.path.abspath(os.path.curdir)
+        
+        is_file_name = False
+        file_name, ext = os.path.splitext(path)
+        if ext:
+            is_file_name = True
+     
+        save_dir = os.path.dirname(path) if is_file_name else path
+    
+        os.makedirs(save_dir, exist_ok=True)
+
+        for i, file in enumerate(self._media_files):
+            if not is_file_name:
+                file_name = os.path.splitext(file.file_name)[0]
+                ext = file.extension
+            ext = ext.strip(".")
+
+            save_path = os.path.join(save_dir, f"{file_name}.{ext}")
+            while os.path.exists(save_path):
+                save_path = os.path.join(save_dir, f"{file_name}_{i}.{ext}")
+                i += 1
+
+            file.save(save_path)
 
     def append(self, file: Union[str, T]):
         """Append a single file to the list."""

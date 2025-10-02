@@ -1,7 +1,7 @@
 import io
 import uuid
 from typing import List, Union, Optional, Any, Dict, TypeVar, Generic
-from media_toolkit.core.media_files import IMediaFile, MediaFile, media_from_any, media_from_FileModel
+from media_toolkit.core.media_files import IMediaFile, MediaFile, media_from_any
 from media_toolkit.core.media_containers.i_media_container import IMediaContainer
 
 from media_toolkit.core.media_containers.media_list import MediaList
@@ -112,7 +112,7 @@ class MediaDict(IMediaContainer, Generic[T]):
 
         if is_file_model_dict(file):
             try:
-                processed_file = media_from_FileModel(file, allow_reads_from_disk=self.read_system_files)
+                processed_file = media_from_any(file, allow_reads_from_disk=self.read_system_files)
                 self._media_files.add(key)
                 return processed_file
             except Exception:
@@ -376,19 +376,70 @@ class MediaDict(IMediaContainer, Generic[T]):
             return {ret[0][0]: ret[0][1]}
         return ret
 
-    def save(self, directory: Optional[str] = None):
+    def save(self, path: Optional[str] = None, create_sub_dirs: bool = True):
         """
-        Save all processable files to a specified directory.
+        Save all media files in the dictionary to a specified location.
 
         Args:
-            directory: Target directory (uses current directory if None)
+            directory: Target directory path or file path. Uses current directory if None or empty.
+                If a file path with an extension is provided, all leaf files are saved using that base
+                name and provided extension (conflicts resolved with numeric suffixes). If a directory
+                path is provided, each leaf file is saved as "{key}.{original_extension}".
+            create_sub_dirs: Whether to create subdirectories for nested containers.
+
+        Behavior:
+            - Creates the target directory if it doesn't exist
+            - Handles filename conflicts by appending numbers (_1, _2, etc.) to duplicates
+            - Preserves original file extensions when saving to a directory
+            - If a file path is provided, uses its extension for all saved leaf files
+            - Nested containers (lists/dicts) are saved into a subdirectory named after the key
+              (or the base filename when a file path is provided)
+
+        Examples:
+            save("/tmp/output")       -> saves leaf files as /tmp/output/{key}.{ext}
+            save("/tmp/all.mp4")      -> saves leaf files as /tmp/all.mp4, /tmp/all_1.mp4, ...
         """
         import os
-        directory = directory or os.path.curdir
-        os.makedirs(directory, exist_ok=True)
+        path = path or os.path.curdir
+        if path == "":
+            path = os.path.abspath(os.path.curdir)
 
-        for key in self._media_files:
-            self._all_items[key].save(directory)
+        is_file_name = False
+        file_name, ext = os.path.splitext(path)
+        if ext:
+            is_file_name = True
+
+        save_dir = os.path.dirname(path) if is_file_name else path
+        os.makedirs(save_dir, exist_ok=True)
+
+        for idx, key in enumerate(self._media_files):
+            item = self._all_items[key]
+
+            # Handle nested containers by saving inside a subdirectory
+            if isinstance(item, IMediaContainer):
+                if create_sub_dirs:
+                    sub_dir = os.path.join(save_dir, (file_name if is_file_name else key))
+                    os.makedirs(sub_dir, exist_ok=True)
+                    item.save(sub_dir)
+                else:
+                    item.save(save_dir)
+                continue
+
+            # Leaf media files
+            if not is_file_name:
+                base_name = key
+                file_ext = getattr(item, "extension", "").strip(".")
+            else:
+                base_name = file_name
+                file_ext = ext.strip(".")
+
+            i = idx
+            save_path = os.path.join(save_dir, f"{base_name}.{file_ext}") if file_ext else os.path.join(save_dir, base_name)
+            while os.path.exists(save_path):
+                save_path = os.path.join(save_dir, f"{base_name}_{i}.{file_ext}") if file_ext else os.path.join(save_dir, f"{base_name}_{i}")
+                i += 1
+
+            item.save(save_path)
 
     def __getitem__(self, key: str):
         """Allow dictionary-style access."""

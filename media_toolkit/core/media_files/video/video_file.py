@@ -42,7 +42,10 @@ class VideoFile(MediaFile):
         if self.path is not None:
             self._video_info = get_video_info(self.path)
         elif self._content_buffer is not None:
-            self._video_info = get_video_info(self._content_buffer)
+            # If buffer is using temp file, use the file path
+            # Otherwise, use BytesIO (PyAV supports it, others will skip)
+            file_source = self._content_buffer.name if self._content_buffer.name else self._content_buffer.to_bytes_io()
+            self._video_info = get_video_info(file_source)
         else:
             self._video_info = None
         return self._video_info

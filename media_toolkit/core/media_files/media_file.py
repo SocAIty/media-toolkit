@@ -170,7 +170,7 @@ class MediaFile(UniversalFile):
         self._file_info()
         return result
 
-    def from_dict(self, file_result_json: dict):
+    def from_dict(self, file_result_json: dict, allow_reads_from_disk: bool = True):
         """
         Load from FileModel dictionary format.
         Extracts metadata before calling parent method.
@@ -186,7 +186,7 @@ class MediaFile(UniversalFile):
         self.content_type = file_result_json["content_type"]
         
         # Parent method calls from_any internally, which routes to appropriate method
-        return super().from_dict(file_result_json)
+        return super().from_dict(file_result_json, allow_reads_from_disk=allow_reads_from_disk)
 
     def save(self, path: str = None):
         """

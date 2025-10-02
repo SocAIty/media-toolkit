@@ -1,6 +1,6 @@
 from media_toolkit.core import (
     MediaFile, ImageFile, VideoFile, AudioFile, MediaList, MediaDict, IMediaFile, IMediaContainer,
-    media_from_file, media_from_any, media_from_numpy, media_from_FileModel
+    media_from_file, media_from_any, media_from_numpy
 )
 
 try:
@@ -16,5 +16,5 @@ except Exception:
 
 __all__ = [
     "MediaFile", "ImageFile", "VideoFile", "AudioFile", "MediaList", "MediaDict", "IMediaFile", "IMediaContainer",
-    "media_from_file", "media_from_any", "media_from_numpy", "media_from_FileModel"
+    "media_from_file", "media_from_any", "media_from_numpy"
 ]

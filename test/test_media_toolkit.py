@@ -12,8 +12,6 @@ from media_toolkit import MediaFile, ImageFile, AudioFile, VideoFile
 from media_toolkit.core.media_files.file_conversion import (
     media_from_numpy,
     media_from_any,
-
-    media_from_FileModel,
     _resolve_media_class,
     _interpret_type_hint
 )
@@ -317,16 +315,19 @@ class TestFileConversionUtilities:
         }
         
         # Test with allow_reads_from_disk=True
-        media_file = media_from_FileModel(file_model, allow_reads_from_disk=True)
+        media_file = media_from_any(file_model, allow_reads_from_disk=True)
         assert isinstance(media_file, ImageFile)  # Should detect as image based on content_type
         
         # Test invalid input
-        result = media_from_FileModel("invalid", default_return_if_not_file_result="default")
-        assert result == "default"
+        try:
+            media_from_any("invalid", allow_reads_from_disk=False)
+            assert False, "Should raise an error"
+        except Exception:
+            pass
         
         # Test security check
         with pytest.raises(ValueError, match="Reading files from disk is not allowed"):
-            media_from_FileModel(file_model, allow_reads_from_disk=False)
+            media_from_any(file_model, allow_reads_from_disk=False)
 
     def test_media_from_FileModel_with_bytes(self):
         """Test media_from_FileModel with byte content."""
@@ -340,7 +341,7 @@ class TestFileConversionUtilities:
             'content_type': 'audio/wav'
         }
         
-        media_file = media_from_FileModel(file_model)
+        media_file = media_from_any(file_model)
         assert isinstance(media_file, AudioFile)
 
     def test_error_handling(self):

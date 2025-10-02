@@ -204,7 +204,7 @@ class UniversalFile(IMediaFile):
         self._content_buffer.seek(0)
         return self
 
-    def from_dict(self, file_result_json: dict):
+    def from_dict(self, file_result_json: dict, allow_reads_from_disk: bool = True):
         """
         Load from FileModel dictionary format.
         
@@ -214,7 +214,7 @@ class UniversalFile(IMediaFile):
         Returns:
             Self for method chaining
         """
-        return self.from_any(file_result_json["content"])
+        return self.from_any(file_result_json["content"], allow_reads_from_disk=allow_reads_from_disk)
 
     def from_url(self, url: str, headers: dict = None):
         """

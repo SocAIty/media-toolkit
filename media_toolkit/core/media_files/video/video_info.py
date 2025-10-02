@@ -67,10 +67,16 @@ def _safe_int(value) -> Optional[int]:
 
 # ---------------- Probe methods ---------------- #
 
-def _probe_pyav(file_path: str) -> Dict[str, Any]:
+def _probe_pyav(file_source) -> Dict[str, Any]:
+    """
+    Probe video using PyAV.
+    
+    Args:
+        file_source: Either a file path (str) or file-like object (BytesIO)
+    """
     try:
         import av
-        with av.open(file_path) as c:
+        with av.open(file_source) as c:
             v = next((s for s in c.streams if s.type == "video"), None)
             a = next((s for s in c.streams if s.type == "audio"), None)
             if not v:

@@ -221,6 +221,13 @@ def media_from_any(
 
     # Handle FileModel dictionaries with type hint preference
     if is_file_model_dict(data):
+        # Convert FileModel class to dictionary
+        if not isinstance(data, dict):
+            if hasattr(data, "__dict__"):
+                data = dict(data)
+            else:
+                raise ValueError("Invalid file model")
+
         if type_hint:
             # Use type_hint to override content_type
             hint_class_name = _interpret_type_hint(type_hint)
@@ -228,12 +235,12 @@ def media_from_any(
                 try:
                     target_class = _resolve_media_class(hint_class_name)
                     instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
-                    return instance.from_dict(data)
+                    return instance.from_dict(data, allow_reads_from_disk=allow_reads_from_disk)
                 except Exception:
                     pass
-        
-        # Fallback to content_type in FileModel
+
         content_type = data.get('content_type', '').lower()
+        
         if 'image' in content_type:
             target_class_name = 'ImageFile'
         elif 'audio' in content_type:
@@ -245,8 +252,8 @@ def media_from_any(
             
         target_class = _resolve_media_class(target_class_name)
         instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
-        return instance.from_dict(data)
-
+        return instance.from_dict(data, allow_reads_from_disk=allow_reads_from_disk)
+    
     # Determine target class using type hint first, then content detection
     target_class_name = None
     
@@ -286,43 +293,3 @@ def media_from_file(file_path: str) -> MediaFileType:
     """Create appropriate media file instance from file path with automatic type detection."""
     return media_from_any(file_path)
 
-
-def media_from_FileModel(
-    file_result: dict,
-    allow_reads_from_disk: bool = False,
-    default_return_if_not_file_result: Any = None,
-    **kwargs
-) -> MediaFileType:
-    """
-    Convert FileModel dictionary to appropriate media file.
-
-    Args:
-        file_result: Dictionary with 'content_type', 'content', and 'file_name'
-        allow_reads_from_disk: Allow reading from disk (security risk)
-        default_return_if_not_file_result: Default return for invalid input
-        **kwargs: Additional arguments for other methods like headers for the from_url method.
-    Returns:
-        Appropriate media file instance
-    """
-    # Handle non-dict inputs
-    if not isinstance(file_result, dict):
-        if hasattr(file_result, "__dict__"):
-            try:
-                file_result = dict(file_result)
-            except Exception:
-                return default_return_if_not_file_result
-        else:
-            return default_return_if_not_file_result
-
-    # Validate FileModel format
-    if not is_file_model_dict(file_result):
-        if default_return_if_not_file_result is not None:
-            return default_return_if_not_file_result
-        raise ValueError("file_result must contain 'file_name' and 'content' keys")
-
-    # Security check
-    content = file_result.get('content', file_result)
-    if not allow_reads_from_disk and is_valid_file_path(content):
-        raise ValueError("Reading files from disk is not allowed (security risk)")
-
-    return media_from_any(file_result, allow_reads_from_disk=allow_reads_from_disk, **kwargs)
