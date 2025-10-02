@@ -16,7 +16,7 @@ dependencies = [
     "numpy>=1.18.0",
     "puremagic>=1.29.0",
     "opencv-python>=4.2",
-    "av>=15.1.0"
+    "av>=15.1.0",
     "tqdm",
     "httpx"
 ]
