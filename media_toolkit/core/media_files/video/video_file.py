@@ -186,13 +186,16 @@ class VideoFile(MediaFile):
         # If audio is provided, build an AudioFile and mux it using existing add_audio
         if audio_generator is not None:
             # Normalize audio chunks (support list or iterator of numpy arrays)
-            audio_file = AudioFile().from_audio_generator(
-                audio_generator, sample_rate=audio_sample_rate,
-                output_format=audio_output_format,
-                codec=audio_codec, array_layout="av"
-            )
-            self.add_audio(audio_file)
-        
+            try:
+                audio_file = AudioFile().from_audio_generator(
+                    audio_generator, sample_rate=audio_sample_rate,
+                    output_format=audio_output_format,
+                    codec=audio_codec, array_layout="av"
+                )
+                self.add_audio(audio_file)
+            except Exception as e:
+                print(f"Error creating audio file: {e}; Returning video without audio.")
+                
         return self
 
     def from_files(self, image_files: Union[List[str], list], frame_rate: int = 30, img_color_format: IMG_COLOR_FORMATS = "bgr24", audio_file=None):

@@ -127,7 +127,7 @@ class MediaList(IMediaContainer, Generic[T]):
         if data is None:
             return self
         
-        if isinstance(data, list):
+        if isinstance(data, list) or isinstance(data, MediaList):
             for d in data:
                 self._process_file(d)
         else:
