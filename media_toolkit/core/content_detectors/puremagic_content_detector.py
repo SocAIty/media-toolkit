@@ -58,18 +58,38 @@ class PureMagicContentDetector:
         'ogv': 'VideoFile',
         'm4v': 'VideoFile',
         
+        # 3D Model formats
+        'obj': 'MediaFile',
+        'glb': 'MediaFile',
+        'gltf': 'MediaFile',
+        'dae': 'MediaFile',
+        'fbx': 'MediaFile',
+        '3ds': 'MediaFile',
+        'ply': 'MediaFile',
+        'stl': 'MediaFile',
+        'step': 'MediaFile',
+        'iges': 'MediaFile',
+        'x3d': 'MediaFile',
+        'blend': 'MediaFile',
+
         # Data formats
         'npy': 'MediaFile',
         'npz': 'MediaFile',
         'pkl': 'MediaFile',
         'pickle': 'MediaFile',
-        
-        # Generic formats
-        'txt': 'MediaFile',
-        'csv': 'MediaFile', 
-        'json': 'MediaFile',
-        'xml': 'MediaFile',
+
+        # Document and text formats
         'pdf': 'MediaFile',
+        'txt': 'MediaFile',
+        'html': 'MediaFile',
+        'htm': 'MediaFile',
+        'json': 'MediaFile',
+        'js': 'MediaFile',
+        'css': 'MediaFile',
+        'xml': 'MediaFile',
+        'csv': 'MediaFile',
+
+        # Archive formats
         'zip': 'MediaFile',
         '7z': 'MediaFile',
         'tar': 'MediaFile',
@@ -250,15 +270,42 @@ class PureMagicContentDetector:
             'ogv': 'video/ogg',
             'm4v': 'video/x-m4v',
             
+            # 3D Models
+            'obj': 'model/obj',
+            'glb': 'model/gltf-binary',
+            'gltf': 'model/gltf+json',
+            'dae': 'model/vnd.collada+xml',
+            'fbx': 'application/octet-stream',  # FBX has no standard MIME type
+            '3ds': 'application/x-3ds',
+            'ply': 'application/x-ply',
+            'stl': 'model/stl',
+            'step': 'application/step',
+            'iges': 'model/iges',
+            'x3d': 'model/x3d+xml',
+            'blend': 'application/x-blender',
+
             # Data
-            'npy': 'file/npy',
-            'npz': 'file/npz',
-            'pkl': 'file/pickle',
-            'pickle': 'file/pickle',
-            'zip': 'file/zip',
-            '7z': 'file/7z',
-            'tar': 'file/tar',
-            'gz': 'file/gzip'
+            'npy': 'application/x-npy',
+            'npz': 'application/x-npz',
+            'pkl': 'application/x-pickle',
+            'pickle': 'application/x-pickle',
+
+            # Documents and text
+            'pdf': 'application/pdf',
+            'txt': 'text/plain',
+            'html': 'text/html',
+            'htm': 'text/html',
+            'json': 'application/json',
+            'js': 'application/javascript',
+            'css': 'text/css',
+            'xml': 'application/xml',
+            'csv': 'text/csv',
+
+            # Archives
+            'zip': 'application/zip',
+            '7z': 'application/x-7z-compressed',
+            'tar': 'application/x-tar',
+            'gz': 'application/gzip'
         }
-        
+
         return extension_mime_map.get(extension.lower(), 'application/octet-stream')

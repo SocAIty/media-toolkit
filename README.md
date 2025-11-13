@@ -253,7 +253,23 @@ MediaToolkit leverages industry-standard libraries for maximum performance:
 ✅ **Seamless conversion**: Change formats on save  
 ✅ **Type-safe**: Full typing support with generics  
 ✅ **Web-ready**: Native FastTaskAPI integration, extra features for httpx and fastapi  
-✅ **Production-tested**: Used in production AI/ML pipelines  
+✅ **Production-tested**: Used in production AI/ML pipelines
+
+## 📋 Format Support Overview
+
+| Category | Formats | Integration | Class | Description |
+|----------|---------|-------------|-------|-------------|
+| **Images** | `jpg`, `jpeg`, `png`, `gif`, `bmp`, `tiff`, `tif`, `jfif`, `ico`, `webp`, `avif`, `heic`, `heif`, `svg` | Deep | `ImageFile` | OpenCV-powered processing, format conversion, channel detection and more. |
+| **Audio** | `wav`, `mp3`, `ogg`, `flac`, `aac`, `m4a`, `wma`, `opus`, `aiff` | Deep | `AudioFile` | FFmpeg/PyAV-powered, format conversions, sample rate conversion, streaming, metadata extraction. |
+| **Video** | `mp4`, `avi`, `mov`, `mkv`, `webm`, `flv`, `wmv`, `3gp`, `ogv`, `m4v` | Deep | `VideoFile` | Hardware-accelerated encoding/decoding, frame extraction, audio extraction. |
+| **3D Models** | `obj`, `glb`, `gltf`, `dae`, `fbx`, `3ds`, `ply`, `stl`, `step`, `iges`, `x3d`, `blend` | Shallow | `MediaFile` | Basic file handling, no specialized 3D processing yet. |
+| **Documents** | `pdf`, `txt`, `html`, `htm`, `json`, `js`, `css`, `xml`, `csv` | Shallow | `MediaFile` | Text and document formats, basic file operations |
+| **Archives** | `zip`, `7z`, `tar`, `gz` | Shallow | `MediaFile` | Archive and compressed file formats. Basic file operations. |
+| **Data** | `npy`, `npz`, `pkl`, `pickle` | Shallow | `MediaFile` | Python data serialization formats. Basic file operations. |
+
+**Deep Integration**: Specialized classes with advanced processing capabilities, format conversion, and media-specific operations.
+
+**Shallow Integration**: Basic `MediaFile` class with universal file operations, automatic format detection, and standard conversions.
 
 ## 🤝 Contributing
 

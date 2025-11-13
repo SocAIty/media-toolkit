@@ -305,6 +305,39 @@ class TestFileConversionUtilities:
         result = media_from_any(original)
         assert result is original  # Should return the same instance
 
+    def test_3d_model_file(self):
+        """Test loading 3D model files."""
+        # Test GLB file (binary glTF)
+        glb_file = media_from_any(f"{test_files_dir}test_mesh.glb")
+        assert isinstance(glb_file, MediaFile)
+        assert glb_file.file_name.endswith('.glb')
+        assert glb_file.file_size() > 0
+
+        # Test that we can convert to different formats
+        glb_bytes = glb_file.to_bytes()
+        assert len(glb_bytes) > 0
+
+        # Test loading from bytes
+        glb_from_bytes = media_from_any(glb_bytes)
+        assert isinstance(glb_from_bytes, MediaFile)
+        assert glb_from_bytes.file_size() == len(glb_bytes)
+
+        # Test base64 conversion
+        glb_base64 = glb_file.to_base64()
+        assert isinstance(glb_base64, str)
+        assert len(glb_base64) > 0
+
+        # Test loading from base64
+        glb_from_base64 = media_from_any(glb_base64)
+        assert isinstance(glb_from_base64, MediaFile)
+        assert glb_from_base64.file_size() == glb_file.file_size()
+
+        # Test with type hint override
+        glb_as_media = media_from_any(f"{test_files_dir}test_mesh.glb", type_hint="asset_3d")
+        assert isinstance(glb_as_media, MediaFile)
+        # Should still contain the GLB data despite the hint
+        assert glb_as_media.file_size() > 0
+
     def test_media_from_FileModel(self):
         """Test media_from_FileModel function."""
         # Test valid FileModel dict
@@ -385,15 +418,16 @@ class TestIntegration:
 def run_all_tests():
     """Run all tests when script is executed directly."""
     setup_test_directory()
+
     # Run existing functionality tests
     existing_tests = TestExistingFunctionality()
-    
+
     existing_tests.test_img_from_url()
     print("✓ Image from URL test passed")
-# 
+#
     existing_tests.test_img_from_file_to_np_array()
     print("✓ Image from file to np array test passed")
-# 
+#
     existing_tests.test_audio_file()
     print("✓ Audio file test passed")
     
@@ -451,7 +485,10 @@ def run_all_tests():
     
     conversion_tests.test_media_from_any_existing_media_file()
     print("✓ Any conversion with existing media file test passed")
-    
+
+    conversion_tests.test_3d_model_file()
+    print("✓ 3D model file test passed")
+
     conversion_tests.test_media_from_FileModel_with_bytes()
     print("✓ FileModel conversion with bytes test passed")
     

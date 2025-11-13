@@ -94,6 +94,12 @@ def _interpret_type_hint(type_hint) -> Optional[str]:
             'mkv': 'VideoFile', 'webm': 'VideoFile', 'flv': 'VideoFile',
             'wmv': 'VideoFile', '3gp': 'VideoFile', 'ogv': 'VideoFile',
             'm4v': 'VideoFile',
+
+            # 3D Model
+            'glb': 'MediaFile', 'gltf': 'MediaFile', 'obj': 'MediaFile',
+            'fbx': 'MediaFile', 'dae': 'MediaFile', 'ply': 'MediaFile',
+            'stl': 'MediaFile', 'step': 'MediaFile', 'iges': 'MediaFile',
+            'x3d': 'MediaFile', 'blend': 'MediaFile',
         }
         
         return extension_mappings.get(type_hint, None)
@@ -292,4 +298,3 @@ def media_from_any(
 def media_from_file(file_path: str) -> MediaFileType:
     """Create appropriate media file instance from file path with automatic type detection."""
     return media_from_any(file_path)
-
