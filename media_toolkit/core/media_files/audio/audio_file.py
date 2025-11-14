@@ -317,7 +317,7 @@ class AudioFile(MediaFile):
             codec: Codec to use for encoding
             sample_rate: Sample rate for the output audio (will use frame's sample rate if not provided)
         """
-        container_format, codec, _ = get_valid_format_codec_ext_combination(output_format, codec)
+        container_format, codec, ext = get_valid_format_codec_ext_combination(output_format, codec)
 
         buffer = io.BytesIO()
         output_container = av.open(buffer, mode='w', format=container_format)
@@ -351,6 +351,10 @@ class AudioFile(MediaFile):
         output_container.close()
 
         self.from_bytes(buffer.getvalue())
+
+        if ext:
+            self.content_type = f"audio/{ext}"
+
         return self
 
     def from_av_packages(self, packages: Union[List[av.Packet], Iterator[av.Packet]], output_format: str = "wav", codec: str = "pcm_s16le", sample_rate: int = 44100):
@@ -363,7 +367,7 @@ class AudioFile(MediaFile):
             codec: Codec to use for encoding
             sample_rate: Sample rate for the output audio
         """
-        container_format, codec, _ = get_valid_format_codec_ext_combination(output_format, codec)
+        container_format, codec, ext = get_valid_format_codec_ext_combination(output_format, codec)
 
         buffer = io.BytesIO()
         output_container = av.open(buffer, mode='w', format=container_format)
@@ -379,6 +383,10 @@ class AudioFile(MediaFile):
         output_container.close()
 
         self.from_bytes(buffer.getvalue())
+
+        if ext:
+            self.content_type = f"audio/{ext}"
+
         return self
 
     def _file_info(self):

@@ -2,7 +2,7 @@ import os.path
 from typing import Tuple
 from media_toolkit.utils.dependency_requirements import requires_numpy, requires_cv2, requires
 from media_toolkit.core.media_files.media_file import MediaFile
-from media_toolkit.core.content_detectors import PureMagicContentDetector
+from media_toolkit.core.content_detectors import ContentDetector
 
 try:
     import cv2
@@ -168,13 +168,20 @@ class ImageFile(MediaFile):
         else:
             raise ValueError(f"Unsupported image shape: {image.shape}")
 
-        # Try multiple encoding formats for format detection
-        format_encodings = [".png", ".jpg", ".bmp", ".tiff", ".tif"]
+        # If we already have reliable metadata, trust it and avoid expensive re-encoding
+        if self.content_type and self.content_type.startswith("image/"):
+            extension = self.extension
+            if extension:
+                return extension, channels
+            if self._image_format:
+                return self._image_format, channels
 
+        # Fallback: try to detect by converting to bytes and using content detector
+        format_encodings = [".png", ".jpg", ".bmp", ".tiff", ".tif"]
         # if content type is already set, try to start with that
         if self.content_type and self.content_type.startswith('image/'):
             ext = "." + self.extension
-            format_encodings.insert(0, ext)
+            format_encodings = [ext] + [encoding for encoding in format_encodings if encoding != ext]
             format_encodings = set(format_encodings)
 
         for ext in format_encodings:
@@ -185,9 +192,10 @@ class ImageFile(MediaFile):
                     encoded_bytes = encoded_image[:1000].tobytes()
                     # Use content detector for validation
                     try:
-                        detected_class, content_type, detected_ext = PureMagicContentDetector.detect_from_buffer(encoded_bytes)
-                        if detected_ext == ext:
-                            return ext.replace(".", ""), channels
+                        detection = ContentDetector.detect_from_buffer(encoded_bytes)
+                        detected_ext = detection.extension
+                        if detected_ext and detected_ext == ext.replace(".", ""):
+                            return detected_ext, channels
                     except Exception:
                         # Fallback to simple validation
                         continue

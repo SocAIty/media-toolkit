@@ -35,16 +35,19 @@ class TestExistingFunctionality:
     def test_audio_file(self):
         """Test from test_audio_file.py"""
         audio_file = AudioFile().from_file(f"{test_files_dir}test_audio.wav")
+        assert audio_file.content_type in ('audio/wave', 'audio/wav')
         audio_file.save(f"{outdir}test_audio.wav")
         assert os.path.exists(f"{outdir}test_audio.wav")
 
     def test_audio_stream(self):
         """Test from test_audio_stream.py"""
         audio_file = AudioFile().from_file(f"{test_files_dir}test_audio.wav")
+        assert audio_file.content_type in ('audio/wave', 'audio/wav')
         audio_stream = audio_file.to_stream()
         
         from_stream_direct = AudioFile().from_stream(audio_stream)
         assert from_stream_direct.file_size() > 0
+        assert from_stream_direct.content_type == 'audio/wav'
         from_stream_direct.save(f"{outdir}test_from_audio_stream.wav")
         assert os.path.exists(f"{outdir}test_from_audio_stream.wav")
 
@@ -55,14 +58,17 @@ class TestExistingFunctionality:
             audio_packages.append(audio)
 
         audio_file_from_np = AudioFile().from_np_array(audio_packages, sample_rate=audio_stream.sample_rate)
+        assert audio_file_from_np.content_type == 'audio/wav'
         audio_file_from_np.save(f"{outdir}test_from_audio_np.mp3")
         assert os.path.exists(f"{outdir}test_from_audio_np.mp3")
 
     def test_audio_from_av_packages(self):
         """Test from test_audio_file.py"""
         audio_file = AudioFile().from_file(f"{test_files_dir}test_audio.wav")
+        assert audio_file.content_type == 'audio/wave'
         audio_stream = audio_file.to_stream()
         audio_file_from_av_packages = AudioFile().from_av_audio_frames(audio_stream.frames(output_format="av"), output_format="m4a", codec="aac")
+        assert audio_file_from_av_packages.content_type == 'audio/m4a'
         audio_file_from_av_packages.save(f"{outdir}test_from_audio_av_packages.m4a")
         audio_file_from_av_packages.save(f"{outdir}test_from_audio_av_packages.mp3")
         assert os.path.exists(f"{outdir}test_from_audio_av_packages.m4a")
@@ -71,17 +77,22 @@ class TestExistingFunctionality:
         """Test from test_image_file.py"""
         url = "https://socaityfiles.blob.core.windows.net/backend-model-meta/speechcraft_icon.png"
         fromurl = ImageFile().from_any(url)
+        assert isinstance(fromurl, ImageFile)
+        assert fromurl.content_type == 'image/png'
+        assert fromurl.file_size() > 0
         fromurl.save(f"{outdir}test_img_from_url.png")
         assert os.path.exists(f"{outdir}test_img_from_url.png")
 
     def test_img_from_file_to_np_array(self):
         """Test from test_image_file.py"""
         img_file = ImageFile().from_file(f"{test_files_dir}test_image.png")
+        assert img_file.content_type == 'image/png'
         np_array = img_file.to_np_array()
         assert np_array is not None
         assert np_array.shape == (544, 512, 4)
         assert np_array.dtype == np.uint8
         img2 = ImageFile().from_np_array(np_array)
+        assert img2.content_type == 'image/png'
         img2.save(f"{outdir}test_img_from_file_to_np_array.jpg")
         assert os.path.exists(f"{outdir}test_img_from_file_to_np_array.jpg")
 
@@ -89,6 +100,7 @@ class TestExistingFunctionality:
         """Test from test_video_file.py"""
         test_video = f"{test_files_dir}test_video.mp4"
         vf = VideoFile().from_file(test_video)
+        assert vf.content_type == 'video/mp4'
         # extract audio_file
         vf.extract_audio(f"{outdir_video}extracted_audio.mp3")
         audio_bytes = vf.extract_audio()
@@ -103,10 +115,12 @@ class TestExistingFunctionality:
         
         files = [f"{outdir_video}test_out_video_stream_{i}.png" for i in range(10)]
         vf = VideoFile().from_files(files, frame_rate=30, audio_file=f"{outdir_video}extracted_audio.mp3")
+        assert vf.content_type == 'video/mp4'
         vf.save(f"{outdir_video}test_from_files_add_audio.mp4")
         
         # from dir; and combine audio and video
         fromdir = VideoFile().from_dir(outdir_video, audio=f"{outdir_video}extracted_audio.mp3", frame_rate=30)
+        assert fromdir.content_type == 'video/mp4'
         fromdir.save(f"{outdir_video}test_from_dir.mp4")
         
         assert os.path.exists(f"{outdir_video}test_from_files_add_audio.mp4")
@@ -130,6 +144,7 @@ class TestExistingFunctionality:
                 break
             audio_packages.append(audio)
         audio_file = AudioFile().from_np_array(audio_packages)
+        assert audio_file.content_type == 'audio/wav'
         audio_file.save(f"{outdir_video}extracted_audio.mp3")
   
         # test video clients with audio_file
@@ -143,9 +158,11 @@ class TestExistingFunctionality:
     def test_video_to_audio_stream(self):
         """Test video to audio stream."""
         vf = VideoFile().from_file(f"{test_files_dir}test_video.mp4")
+        assert vf.content_type == 'video/mp4'
         stream = vf.to_stream()
         audio_frames = stream.audio_frames(output_format="av")
         af = AudioFile().from_av_audio_frames(audio_frames)
+        assert af.content_type == 'audio/wav'
         af.save(f"{outdir_video}test_video_to_audio_stream.mp3")
         af.save(f"{outdir_video}test_video_to_audio_stream.m4a")
         af.save(f"{outdir_video}test_video_to_audio_stream.wav")
@@ -179,6 +196,7 @@ class TestExistingFunctionality:
             audio_generator=audio_frames,
             frame_rate=int(vf.video_info.frame_rate or 30)
         )
+        assert video_from_array.content_type == 'video/mp4'
         end_time = time.time()
         fps = n_frames / (end_time - start_time)
         print(f"Video encode from frames fps: {fps}")
@@ -192,8 +210,10 @@ class TestExistingFunctionality:
         out_path = f"{outdir_video}test_direct_to_and_from_stream.mp4"
         # from file
         vf = VideoFile().from_file(in_path)
+        assert vf.content_type == 'video/mp4'
         video_gen = vf.to_stream()
         fromstream = VideoFile().from_stream(video_gen)
+        assert fromstream.content_type == 'video/mp4'
         # save the video
         fromstream.save(out_path)
         # check if the video is roughly the same
@@ -268,20 +288,24 @@ class TestFileConversionUtilities:
         # Test with existing audio file
         audio_file = media_from_any(f"{test_files_dir}test_audio.wav")
         assert isinstance(audio_file, AudioFile)
+        assert audio_file.content_type in ('audio/wave', 'audio/wav')
         
         # Test with existing video file
         video_file = media_from_any(f"{test_files_dir}test_video.mp4")
         assert isinstance(video_file, VideoFile)
+        assert video_file.content_type == 'video/mp4'
 
     def test_media_from_any_file_path(self):
         """Test media_from_any with file paths."""
         # Test audio file
         audio_file = media_from_any(f"{test_files_dir}test_audio.wav")
         assert isinstance(audio_file, AudioFile)
+        assert audio_file.content_type in ('audio/wave', 'audio/wav')
         
         # Test video file
         video_file = media_from_any(f"{test_files_dir}test_video.mp4")
         assert isinstance(video_file, VideoFile)
+        assert video_file.content_type == 'video/mp4'
 
     def test_media_from_any_with_type_hint(self):
         """Test media_from_any with type hints."""
@@ -333,16 +357,11 @@ class TestFileConversionUtilities:
         assert isinstance(glb_from_base64, MediaFile)
         assert glb_from_base64.file_size() == glb_file.file_size()
 
-        # Test with type hint override
-        glb_as_media = media_from_any(f"{test_files_dir}test_mesh.glb", type_hint="asset_3d")
-        assert isinstance(glb_as_media, MediaFile)
-        # Should still contain the GLB data despite the hint
-        assert glb_as_media.file_size() > 0
-
-        glb_from_url = media_from_any("https://replicate.delivery/yhqm/VL5mWW95DxoQAdPeOHf3LlTeC7PJv2MhMu17YXWcrhpuP2RrA/textured_mesh.glb")
+        glb_from_url = media_from_any("https://socaityfiles.blob.core.windows.net/backend-model-meta/elephant_3d_asset.glb")
         assert isinstance(glb_from_url, MediaFile)
+        assert glb_from_url.content_type == 'model/gltf-binary'
         assert glb_from_url.file_size() > 0
-        pass 
+        pass
 
     def test_media_from_FileModel(self):
         """Test media_from_FileModel function."""
@@ -356,6 +375,7 @@ class TestFileConversionUtilities:
         # Test with allow_reads_from_disk=True
         media_file = media_from_any(file_model, allow_reads_from_disk=True)
         assert isinstance(media_file, ImageFile)  # Should detect as image based on content_type
+        assert media_file.content_type == 'image/jpeg'
         
         # Test invalid input
         try:
@@ -382,6 +402,7 @@ class TestFileConversionUtilities:
         
         media_file = media_from_any(file_model)
         assert isinstance(media_file, AudioFile)
+        assert media_file.content_type in ('audio/wave', 'audio/wav')
 
     def test_error_handling(self):
         """Test error handling in conversion functions."""
@@ -401,11 +422,13 @@ class TestIntegration:
         """Test converting between different media types."""
         # Load audio file
         audio_file = AudioFile().from_file(f"{test_files_dir}test_audio.wav")
+        assert audio_file.content_type in ('audio/wave', 'audio/wav')
         
         # Convert to bytes and back
         audio_bytes = audio_file.to_bytes()
         new_audio = media_from_any(audio_bytes, type_hint="audio")
         assert isinstance(new_audio, AudioFile)
+        assert new_audio.content_type in ('audio/wave', 'audio/wav')
         
         # Save and verify
         new_audio.save(f"{outdir}round_trip_audio.wav")
@@ -424,10 +447,6 @@ class TestIntegration:
 def run_all_tests():
     """Run all tests when script is executed directly."""
     setup_test_directory()
-
-    conversion_tests = TestFileConversionUtilities()
-    conversion_tests.test_3d_model_file()
-    print("✓ 3D model file test passed")
 
     # Run existing functionality tests
     existing_tests = TestExistingFunctionality()

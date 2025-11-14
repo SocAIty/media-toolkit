@@ -13,10 +13,10 @@ from media_toolkit.core.media_files.image_file import ImageFile
 from media_toolkit.core.media_files.audio.audio_file import AudioFile
 from media_toolkit.core.media_files.video.video_file import VideoFile
 
-from media_toolkit.core.content_detectors import PureMagicContentDetector, NumpyContentTypeDetector
+from media_toolkit.core.content_detectors import ContentDetector
 from media_toolkit.utils.data_type_utils import (
     is_numpy_array_like, is_file_model_dict,
-    is_valid_file_path
+    is_valid_file_path, is_url
 )
 
 MediaFileType = Union[MediaFile, ImageFile, AudioFile, VideoFile]
@@ -149,31 +149,20 @@ def media_from_numpy(
             # If hint fails, continue to auto-detection
             pass
     
-    # Auto-detect using NumpyContentTypeDetector
-    try:
-        media_type, extension = NumpyContentTypeDetector.detect_numpy_content_type(np_array)
-        detected_class_name = _interpret_type_hint(extension)
-        target_class = _resolve_media_class(detected_class_name)
-        instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
-        
-        # Try to create from numpy array
-        if hasattr(instance, 'from_np_array'):
-            return instance.from_np_array(np_array)
-        else:
-            # Fallback: use UniversalFile method
-            universal = UniversalFile(use_temp_file, temp_dir)
-            universal.from_np_array(np_array)
-            
-            instance.from_bytes(universal.to_bytes())
-            return instance
-            
-    except Exception:
-        # Final fallback to MediaFile
-        fallback = MediaFile(use_temp_file=use_temp_file, temp_dir=temp_dir)
+    detection = ContentDetector.detect_from_numpy(np_array)
+    target_class = _resolve_media_class(detection.media_class)
+    instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
+    
+    # Try to create from numpy array
+    if hasattr(instance, 'from_np_array'):
+        return instance.from_np_array(np_array)
+    else:
+        # Fallback: use UniversalFile method
         universal = UniversalFile(use_temp_file, temp_dir)
         universal.from_np_array(np_array)
-        fallback.from_bytes(universal.to_bytes())
-        return fallback
+        
+        instance.from_bytes(universal.to_bytes())
+        return instance
 
 
 def media_from_any(
@@ -202,24 +191,46 @@ def media_from_any(
     if isinstance(data, IMediaFile):
         return data
 
-    # Handle file paths directly to preserve path for probing
-    if isinstance(data, str) and is_valid_file_path(data):
-        if not allow_reads_from_disk:
-            raise ValueError("Reading from disk is not allowed.")
+    # Handle string inputs specially (file paths and URLs)
+    if isinstance(data, str):
+        # Handle file paths directly to preserve path for probing
+        if is_valid_file_path(data):
+            if not allow_reads_from_disk:
+                raise ValueError("Reading from disk is not allowed.")
 
-        target_class_name = None
-        if type_hint:
-            target_class_name = _interpret_type_hint(type_hint)
+            target_class_name = None
+            if type_hint:
+                target_class_name = _interpret_type_hint(type_hint)
 
-        if not target_class_name:
-            try:
-                target_class_name, _, _ = PureMagicContentDetector.detect_from_path(data)
-            except Exception:
-                target_class_name = 'MediaFile'
+            if not target_class_name:
+                try:
+                    detection = ContentDetector.detect_from_path(data)
+                    target_class_name = detection.media_class
+                except Exception:
+                    target_class_name = 'MediaFile'
 
-        target_class = _resolve_media_class(target_class_name)
-        instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
-        return instance.from_file(data)
+            target_class = _resolve_media_class(target_class_name)
+            instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
+            return instance.from_file(data)
+
+        # Handle URLs with dedicated detection
+        if is_url(data):
+            target_class_name = None
+            if type_hint:
+                target_class_name = _interpret_type_hint(type_hint)
+
+            if not target_class_name:
+                try:
+                    detection = ContentDetector.detect_from_url(data)
+                    target_class_name = detection.media_class
+                except Exception:
+                    target_class_name = 'MediaFile'
+
+            target_class = _resolve_media_class(target_class_name)
+            instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
+            headers = kwargs.get("headers")
+            instance.from_url(data, headers=headers)
+            return instance
 
     # Handle numpy arrays specially
     if is_numpy_array_like(data):
@@ -273,8 +284,11 @@ def media_from_any(
     # If no valid hint, use magic content detection
     if not target_class_name:
         try:
-            detected_class_name, content_type, extension = PureMagicContentDetector.detect_from_universal_file(universal)
-            target_class_name = detected_class_name
+            detection = ContentDetector.detect_from_universal_file(
+                universal,
+                file_name=getattr(universal, 'file_name', None)
+            )
+            target_class_name = detection.media_class
         except Exception:
             target_class_name = 'MediaFile'
 

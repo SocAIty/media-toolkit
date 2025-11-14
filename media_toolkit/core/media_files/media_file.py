@@ -3,6 +3,7 @@ import os
 from typing import Union, BinaryIO, Optional, Tuple
 import re
 
+from media_toolkit.core.content_detectors import ContentDetector
 from media_toolkit.core.media_files.universal_file import UniversalFile
 from media_toolkit.utils.dependency_requirements import requires_numpy
 from media_toolkit.utils.data_type_utils import (
@@ -217,17 +218,20 @@ class MediaFile(UniversalFile):
         # from base64 -> from-bytes -> tempfile
         # from url -> from bytesio
 
-        # determine content type
-        if not hasattr(self, 'content_type') or self.content_type is None:
-            from media_toolkit.core.content_detectors.puremagic_content_detector import PureMagicContentDetector
-            media_class_name, content_type, file_extension = PureMagicContentDetector.detect_from_universal_file(self)
-            self.content_type = content_type
-
-        # Extract filename from path or temp file (always do this for metadata)
+        # Extract filename from path or temp file for metadata hints
+        file_name_hint = self.file_name
         if self.path is not None:
-            self.file_name = os.path.basename(self.path)
+            file_name_hint = os.path.basename(self.path)
         elif hasattr(self._content_buffer, "name") and self._content_buffer.name is not None:
-            self.file_name = os.path.basename(self._content_buffer.name)
+            file_name_hint = os.path.basename(self._content_buffer.name)
+
+        if file_name_hint is not None:
+            self.file_name = file_name_hint
+
+        # Determine content type using the centralized detector
+        if not hasattr(self, 'content_type') or self.content_type is None:
+            detection = ContentDetector.detect_from_universal_file(self, file_name=self.file_name)
+            self.content_type = detection.content_type
 
         # Apply defaults if not set
         if self.file_name is None:
