@@ -311,6 +311,7 @@ class TestFileConversionUtilities:
         glb_file = media_from_any(f"{test_files_dir}test_mesh.glb")
         assert isinstance(glb_file, MediaFile)
         assert glb_file.file_name.endswith('.glb')
+        assert glb_file.content_type == 'model/gltf-binary'
         assert glb_file.file_size() > 0
 
         # Test that we can convert to different formats
@@ -337,6 +338,11 @@ class TestFileConversionUtilities:
         assert isinstance(glb_as_media, MediaFile)
         # Should still contain the GLB data despite the hint
         assert glb_as_media.file_size() > 0
+
+        glb_from_url = media_from_any("https://replicate.delivery/yhqm/VL5mWW95DxoQAdPeOHf3LlTeC7PJv2MhMu17YXWcrhpuP2RrA/textured_mesh.glb")
+        assert isinstance(glb_from_url, MediaFile)
+        assert glb_from_url.file_size() > 0
+        pass 
 
     def test_media_from_FileModel(self):
         """Test media_from_FileModel function."""
@@ -418,6 +424,10 @@ class TestIntegration:
 def run_all_tests():
     """Run all tests when script is executed directly."""
     setup_test_directory()
+
+    conversion_tests = TestFileConversionUtilities()
+    conversion_tests.test_3d_model_file()
+    print("✓ 3D model file test passed")
 
     # Run existing functionality tests
     existing_tests = TestExistingFunctionality()
