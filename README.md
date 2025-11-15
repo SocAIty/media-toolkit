@@ -244,7 +244,7 @@ MediaToolkit leverages industry-standard libraries for maximum performance:
 **Benchmarks:**
 - Audio conversion: ~100x faster than librosa/pydub
 - Image processing: Near-native OpenCV speed
-- Video processing: Hardware-accelerated encoding/decoding. FPS > 300 for video decoding on consumer grade hardware.
+- Video processing: Hardware-accelerated encoding/decoding. FPS > 500 for video decoding on consumer grade hardware.
 
 ## 🔧 Key Features
 
