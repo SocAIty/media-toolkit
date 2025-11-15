@@ -9,6 +9,7 @@ from media_toolkit.utils.dependency_requirements import requires_numpy
 from media_toolkit.utils.data_type_utils import (
     is_valid_file_path, is_url, is_starlette_upload_file, is_file_model_dict
 )
+from media_toolkit.core.file_types import mime_to_extension
 
 
 try:
@@ -243,14 +244,18 @@ class MediaFile(UniversalFile):
     @property
     def extension(self) -> Optional[str]:
         """
-        Get file extension from filename.
+        Get file extension from content type or filename.
 
         Returns:
             File extension without dot, or None if undetermined
         """
-        if self.content_type and "/" in self.content_type:
-            return self.content_type.split("/")[-1].lower()
+        # If content type is detected and not default, try to map mime type back to extension
+        if (self.content_type and self.content_type != "application/octet-stream" and "/" in self.content_type):
+            extension = mime_to_extension(self.content_type)
+            if extension:
+                return extension
 
+        # Fallback to filename extension
         if self.file_name and "." in self.file_name:
             return self.file_name.rsplit(".", 1)[-1].lower()
 

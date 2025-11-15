@@ -171,5 +171,21 @@ MEDIA_TYPE_DEFAULT_EXTENSION = {
     'npy': 'npy'
 }
 
-__all__ = ['EXTENSION_TO_CLASS', 'EXTENSION_TO_MIME', 'MEDIA_TYPE_DEFAULT_EXTENSION']
 
+def mime_to_extension(mime_type: str) -> str:
+    """
+    Convert MIME type back to file extension by reversing the EXTENSION_TO_MIME mapping.
+
+    Args:
+        mime_type: MIME type string (e.g., 'image/jpeg')
+
+    Returns:
+        File extension without dot (e.g., 'jpg'), or None if not found
+    """
+    # Create reverse mapping on demand for efficiency
+    # This could be cached if performance becomes an issue
+    extension_to_mime_reverse = {v: k for k, v in EXTENSION_TO_MIME.items()}
+    return extension_to_mime_reverse.get(mime_type)
+
+
+__all__ = ['EXTENSION_TO_CLASS', 'EXTENSION_TO_MIME', 'MEDIA_TYPE_DEFAULT_EXTENSION', 'mime_to_extension']

@@ -336,6 +336,7 @@ class TestFileConversionUtilities:
         assert isinstance(glb_file, MediaFile)
         assert glb_file.file_name.endswith('.glb')
         assert glb_file.content_type == 'model/gltf-binary'
+        assert glb_file.extension == 'glb'
         assert glb_file.file_size() > 0
 
         # Test that we can convert to different formats
@@ -447,7 +448,6 @@ class TestIntegration:
 def run_all_tests():
     """Run all tests when script is executed directly."""
     setup_test_directory()
-
     # Run existing functionality tests
     existing_tests = TestExistingFunctionality()
 
