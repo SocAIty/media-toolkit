@@ -32,9 +32,9 @@ def is_url(url: str) -> bool:
 
 def is_starlette_upload_file(data) -> bool:
     """Check if data is a Starlette UploadFile."""
-    return (hasattr(data, '__module__') and 
+    return (hasattr(data, '__module__') and
             hasattr(data, '__class__') and
-            data.__module__ == 'starlette.datastructures' and 
+            data.__module__ == 'starlette.datastructures' and
             data.__class__.__name__ == 'UploadFile')
 
 
@@ -53,8 +53,8 @@ def is_file_model_dict(data: dict) -> bool:
 
 def is_numpy_array_like(data) -> bool:
     """Check if data is a numpy array or array-like object."""
-    return (type(data).__name__ == 'ndarray' or 
-            hasattr(data, '__array__') or 
+    return (type(data).__name__ == 'ndarray' or
+            hasattr(data, '__array__') or
             (hasattr(data, 'dtype') and hasattr(data, 'shape')))
 
 
@@ -77,12 +77,24 @@ def extract_extension(filename: str) -> str:
 
 
 def is_likely_base64(s: str) -> bool:
-    """Check if string is likely a base64 encoded string. It does not check if the base64 is valid and does not try to decode it."""
+    """
+    Check if string is likely a base64 encoded string.
+    It does not check if the base64 is valid and does not try to decode it.
+    It enforces a minimum length for raw base64 strings to avoid false positives with common words.
+    """
     if not isinstance(s, str):
         return False
 
-    # Strip whitespace for accurate checking
     s = s.strip()
+    
+    # Check for Data URI with base64
+    if s.lower().startswith("data:"):
+        return ";base64," in s[:50].lower()
+
+    # For raw base64, enforce minimum length to avoid false positives like "word", "play"
+    # 100 chars is approx 75 bytes, reasonable minimum for a media file
+    if len(s) < 100:
+        return False
     
     # Base64 length must be a multiple of 4
     if len(s) % 4 != 0:
