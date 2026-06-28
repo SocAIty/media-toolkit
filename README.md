@@ -140,16 +140,16 @@ modifiedVid = VideoFile().from_files(images, frame_rate=30, audio_file="audio.mp
 
 ## 🌐 Web & API Integration
 
-### Native [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) Support
+### Native [APIPod](https://github.com/SocAIty/APIPod) Support
 
-Built-in integration with FastTaskAPI for simplified file handling:
+Built-in integration with APIPod for simplified file handling:
 
 ```python
-from fast_task_api import FastTaskAPI, ImageFile, VideoFile
+from apipod import APIPod, ImageFile, VideoFile
 
-app = FastTaskAPI()
+app = APIPod()
 
-@app.task_endpoint("/process")
+@app.endpoint("/process")
 def process_media(image: ImageFile, video: VideoFile) -> VideoFile:
     # Automatic type conversion, validation
     modified_video = my_ai_inference(image, video)
@@ -252,7 +252,7 @@ MediaToolkit leverages industry-standard libraries for maximum performance:
 ✅ **Automatic format detection**: Smart content-type inference  
 ✅ **Seamless conversion**: Change formats on save  
 ✅ **Type-safe**: Full typing support with generics  
-✅ **Web-ready**: Native FastTaskAPI integration, extra features for httpx and fastapi  
+✅ **Web-ready**: Native APIPod integration, extra features for httpx and fastapi  
 ✅ **Production-tested**: Used in production AI/ML pipelines
 
 ## 📋 Format Support Overview
