@@ -141,16 +141,16 @@ modified_video = VideoFile().from_files(images, frame_rate=30, audio_file="audio
 
 ## Web and API integration
 
-### Native [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) support
+### Native [APIPod](https://github.com/SocAIty/APIPod) Support
 
-Built-in integration with FastTaskAPI for simplified file handling:
+Built-in integration with APIPod for simplified file handling:
 
 ```python
-from fast_task_api import FastTaskAPI, ImageFile, VideoFile
+from apipod import APIPod, ImageFile, VideoFile
 
-app = FastTaskAPI()
+app = APIPod()
 
-@app.task_endpoint("/process")
+@app.endpoint("/process")
 def process_media(image: ImageFile, video: VideoFile) -> VideoFile:
     # Automatic type conversion and validation
     modified_video = my_ai_inference(image, video)
@@ -288,4 +288,7 @@ MIT License, see [LICENSE](LICENSE) for details.
 
 ---
 
-Built by [SocAIty](https://www.socaity.ai).
+<p align="center">
+  Made with ❤️ by <a href="https://www.socaity.ai?utm_source=github&utm_content=media-toolkit-20-29-06-2026">SocAIty</a>
+  <p align="center">Remember: Existence is pain to a Meseex, but task completion brings them joy!</p>
+</p>

@@ -75,13 +75,13 @@ class TestExistingFunctionality:
 
     def test_img_from_url(self):
         """Test from test_image_file.py"""
-        url = "https://socaityfiles.blob.core.windows.net/backend-model-meta/speechcraft_icon.png"
+        url = "https://www.socaity.ai/socaity_logo.webp"
         fromurl = ImageFile().from_any(url)
         assert isinstance(fromurl, ImageFile)
-        assert fromurl.content_type == 'image/png'
+        assert fromurl.content_type == 'image/webp'
         assert fromurl.file_size() > 0
-        fromurl.save(f"{outdir}test_img_from_url.png")
-        assert os.path.exists(f"{outdir}test_img_from_url.png")
+        fromurl.save(f"{outdir}test_img_from_url.webp")
+        assert os.path.exists(f"{outdir}test_img_from_url.webp")
 
     def test_img_from_file_to_np_array(self):
         """Test from test_image_file.py"""
@@ -358,7 +358,7 @@ class TestFileConversionUtilities:
         assert isinstance(glb_from_base64, MediaFile)
         assert glb_from_base64.file_size() == glb_file.file_size()
 
-        glb_from_url = media_from_any("https://socaityfiles.blob.core.windows.net/backend-model-meta/elephant_3d_asset.glb")
+        glb_from_url = media_from_any("TODO: INSERT URL HERE")
         assert isinstance(glb_from_url, MediaFile)
         assert glb_from_url.content_type == 'model/gltf-binary'
         assert glb_from_url.file_size() > 0

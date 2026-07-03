@@ -118,6 +118,23 @@ class MediaFile(UniversalFile):
         self._file_info()
         return result
 
+    def from_byte_chunks(
+        self,
+        chunks,
+        content_type: str = None,
+        file_name: str = None,
+    ):
+        """Load content from an iterable of byte chunks (e.g. a live HTTP stream).
+
+        The iterable is drained fully, then passed through :meth:`from_bytes`.
+        """
+        data = b"".join(c for c in chunks if c)
+        if content_type:
+            self.content_type = content_type
+        if file_name:
+            self.file_name = file_name
+        return self.from_bytes(data)
+
     def from_starlette_upload_file(self, starlette_upload_file):
         """
         Load from Starlette UploadFile with metadata extraction.
