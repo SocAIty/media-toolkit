@@ -1,51 +1,53 @@
-
-<h1 align="center">MediaToolkit</h1>
 <p align="center">
-  <img align="center" src="docs/media-file-icon.png" height="200" />
-</p>
-<h3 align="center">Ultra-Fast Python Media Processing • FFmpeg • OpenCV • PyAV</h3>
-
-<p align="center">
-  <strong>⚡ Lightning-fast • 🛠️ Simple API • 🔄 Any Format • 🌐 Web-ready • 🖥️ Cross-platform</strong>
+  <img src="docs/assets/banner.png" alt="MediaToolkit. One file API. Any media." width="100%" />
 </p>
 
----
+<p align="center">
+  <a href="https://pypi.org/project/media-toolkit/"><img src="https://img.shields.io/pypi/v/media-toolkit?labelColor=000000&color=76B900" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/media-toolkit/"><img src="https://img.shields.io/pypi/pyversions/media-toolkit?labelColor=000000&color=76B900" alt="Python versions"></a>
+  <a href="https://github.com/SocAIty/media-toolkit"><img src="https://img.shields.io/badge/github-SocAIty/media--toolkit-76B900?labelColor=000000" alt="GitHub"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-76B900?labelColor=000000" alt="License"></a>
+</p>
 
-**MediaToolkit** is a high-performance Python library for processing images, audio, and video with a unified, developer-friendly API. Built on FFmpeg (PyAV) and OpenCV for production-grade speed and reliability.
+<h3 align="center">One file API. Any media. Fast, typed, web-ready.</h3>
 
-**Perfect for:** AI/ML pipelines, web services, batch processing, media automation, computer vision, and audio analysis.
+<p align="center">
+  Load image, audio, and video from files, URLs, bytes, base64, or numpy, convert on save.<br>
+  Built on FFmpeg (PyAV) and OpenCV for production-grade speed.
+</p>
 
-## 📦 Installation
+## Install
 
 ```bash
 pip install media-toolkit
 ```
 
-**Note:** Audio/video processing requires FFmpeg. [PyAV](https://github.com/PyAV-Org/PyAV) usually installs it automatically, but if needed, install manually from [ffmpeg.org](https://ffmpeg.org/).
+Audio and video processing requires FFmpeg. [PyAV](https://github.com/PyAV-Org/PyAV) usually installs it automatically. If needed, install it manually from [ffmpeg.org](https://ffmpeg.org/).
 
-## ⚡ Quick Start
+## Quick start
 
-**One API for all media types** - load from files, URLs, bytes, base64, or numpy arrays:
+One API for all media types. Load from files, URLs, bytes, base64, or numpy arrays:
 
 ```python
 from media_toolkit import ImageFile, AudioFile, VideoFile, media_from_any
 
-# load any file and convert it to the correct format. This works with smart content detection
-audio = media_from_any("media/my_favorite_song.mp3") # -> AudioFile
+# Load any file and convert it to the correct type, with smart content detection
+audio = media_from_any("media/my_favorite_song.mp3")  # returns AudioFile
 
 # Load from any source
 image = ImageFile().from_any("https://example.com/image.jpg")
 audio = AudioFile().from_file("audio.wav")
 video = VideoFile().from_file("video.mp4")
-imb = ImageFile().from_base64("data:image/png;base64,...")
+img = ImageFile().from_base64("data:image/png;base64,...")
+
 # Convert to any format
-image_array = image.to_np_array()      # → numpy array (H, W, C)
-audio_array = audio.to_np_array()      # → numpy array (samples, channels)
-image_base64 = image.to_base64()       # → base64 string
-video_bytes = video.to_bytes_io()      # → BytesIO object
+image_array = image.to_np_array()      # numpy array (H, W, C)
+audio_array = audio.to_np_array()      # numpy array (samples, channels)
+image_base64 = image.to_base64()       # base64 string
+video_bytes = video.to_bytes_io()      # BytesIO object
 ```
 
-### Batch Processing
+### Batch processing
 
 ```python
 from media_toolkit import MediaList, AudioFile
@@ -61,9 +63,9 @@ for audio in audio_files:
     audio.save(f"converted_{audio.file_name}.mp3")  # Auto-convert on save
 ```
 
-## 🖼️ Image Processing
+## Image processing
 
-**OpenCV-powered image operations:**
+OpenCV-powered image operations:
 
 ```python
 from media_toolkit import ImageFile
@@ -71,7 +73,7 @@ import cv2
 
 # Load and process
 img = ImageFile().from_any("image.png")
-image_array = img.to_np_array()  # → (H, W, C) uint8 array
+image_array = img.to_np_array()  # (H, W, C) uint8 array
 
 # Apply transformations
 flipped = cv2.flip(image_array, 0)
@@ -80,9 +82,9 @@ flipped = cv2.flip(image_array, 0)
 ImageFile().from_np_array(flipped).save("flipped.jpg")
 ```
 
-## 🎵 Audio Processing
+## Audio processing
 
-**FFmpeg/PyAV-powered audio operations:**
+FFmpeg/PyAV-powered audio operations:
 
 ```python
 from media_toolkit import AudioFile
@@ -90,8 +92,8 @@ from media_toolkit import AudioFile
 # Load audio
 audio = AudioFile().from_file("input.wav")
 
-# Get numpy array for ML/analysis
-audio_array = audio.to_np_array()  # → (samples, channels) float32 in [-1, 1] range
+# Get numpy array for ML and analysis
+audio_array = audio.to_np_array()  # (samples, channels) float32 in [-1, 1] range
 
 # Inspect metadata
 print(f"Sample rate: {audio.sample_rate} Hz; Channels: {audio.channels}; Duration: {audio.duration}")
@@ -109,11 +111,11 @@ new_audio = AudioFile().from_np_array(
 )
 ```
 
-**Supported formats:** WAV, MP3, FLAC, AAC, M4A, OGG, Opus, WMA, AIFF
+Supported formats: WAV, MP3, FLAC, AAC, M4A, OGG, Opus, WMA, AIFF.
 
-## 🎬 Video Processing
+## Video processing
 
-**High-performance video operations:**
+High-performance video operations:
 
 ```python
 from media_toolkit import VideoFile
@@ -128,19 +130,18 @@ audio = video.extract_audio("audio.mp3")
 for i, frame in enumerate(video.to_stream()):
     if i >= 300:  # First 300 frames
         break
-    # frame is numpy array (H, W, C)
+    # frame is a numpy array (H, W, C)
     processed = my_processing_function(frame)
     cv2.imwrite(f"frame_{i:04d}.png", processed)
 
 # Create video from images
 images = [f"frame_{i:04d}.png" for i in range(300)]
-modifiedVid = VideoFile().from_files(images, frame_rate=30, audio_file="audio.mp3")
-
+modified_video = VideoFile().from_files(images, frame_rate=30, audio_file="audio.mp3")
 ```
 
-## 🌐 Web & API Integration
+## Web and API integration
 
-### Native [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) Support
+### Native [FastTaskAPI](https://github.com/SocAIty/FastTaskAPI) support
 
 Built-in integration with FastTaskAPI for simplified file handling:
 
@@ -151,14 +152,13 @@ app = FastTaskAPI()
 
 @app.task_endpoint("/process")
 def process_media(image: ImageFile, video: VideoFile) -> VideoFile:
-    # Automatic type conversion, validation
+    # Automatic type conversion and validation
     modified_video = my_ai_inference(image, video)
-    # any media can be returned automatically
+    # Any media can be returned automatically
     return modified_video
 ```
 
-
-### FastAPI Integration
+### FastAPI integration
 
 ```python
 from fastapi import FastAPI, UploadFile, File
@@ -171,7 +171,7 @@ async def process_image(file: UploadFile = File(...)):
     image = ImageFile().from_any(file)
 ```
 
-### HTTP Client Usage
+### HTTP client usage
 
 ```python
 import httpx
@@ -184,24 +184,25 @@ files = {"file": image.to_httpx_send_able_tuple()}
 response = httpx.post("https://api.example.com/upload", files=files)
 ```
 
+## Advanced features
 
-## 📋 Advanced Features
+### Container classes
 
-### Container Classes
+`MediaList` for type-safe batch processing:
 
-**MediaList** - Type-safe batch processing:
 ```python
 from media_toolkit import MediaList, ImageFile
 
 images = MediaList[ImageFile]()
 images.extend(["img1.jpg", "img2.png", "https://example.com/img3.jpg"])
 
-# Lazy loading - files loaded on access
+# Lazy loading, files are loaded on access
 for img in images:
     img.save(f"processed_{img.file_name}")
 ```
 
-**MediaDict** - Key-value media storage:
+`MediaDict` for key-value media storage:
+
 ```python
 from media_toolkit import MediaDict, ImageFile
 
@@ -213,7 +214,7 @@ media_db["banner"] = "https://example.com/banner.png"
 json_data = media_db.to_json()
 ```
 
-### Streaming for Large Files
+### Streaming for large files
 
 ```python
 # Memory-efficient processing
@@ -226,65 +227,65 @@ stream = video.to_stream()
 for frame in stream:
     process_frame(frame)  # Frame-by-frame processing
 
-# video-to-audio-stream
+# Video-to-audio stream
 for av_frame in stream.audio_frames():
     pass
-
 ```
 
-## 🚀 Performance
+## Performance
 
 MediaToolkit leverages industry-standard libraries for maximum performance:
 
-- **FFmpeg (PyAV)**: Professional-grade audio/video codec support
-- **OpenCV**: Optimized computer vision operations
-- **Streaming**: Memory-efficient processing of large files
-- **Hardware acceleration**: GPU support where available
+- FFmpeg (PyAV): professional-grade audio and video codec support
+- OpenCV: optimized computer vision operations
+- Streaming: memory-efficient processing of large files
+- Hardware acceleration: GPU support where available
 
-**Benchmarks:**
-- Audio conversion: ~100x faster than librosa/pydub
-- Image processing: Near-native OpenCV speed
-- Video processing: Hardware-accelerated encoding/decoding. FPS > 500 for video decoding on consumer grade hardware.
+Benchmarks:
 
-## 🔧 Key Features
+- Audio conversion: roughly 100x faster than librosa and pydub
+- Image processing: near-native OpenCV speed
+- Video processing: hardware-accelerated encoding and decoding, over 500 FPS for video decoding on consumer-grade hardware
 
-✅ **Universal input**: Files, URLs, bytes, base64, numpy arrays, bytesio, starlette upload files, soundfile  
-✅ **Automatic format detection**: Smart content-type inference  
-✅ **Seamless conversion**: Change formats on save  
-✅ **Type-safe**: Full typing support with generics  
-✅ **Web-ready**: Native FastTaskAPI integration, extra features for httpx and fastapi  
-✅ **Production-tested**: Used in production AI/ML pipelines
+## Key features
 
-## 📋 Format Support Overview
+- Universal input: files, URLs, bytes, base64, numpy arrays, BytesIO, Starlette upload files, soundfile
+- Automatic format detection: smart content-type inference
+- Seamless conversion: change formats on save
+- Type-safe: full typing support with generics
+- Web-ready: native FastTaskAPI integration, plus extras for httpx and FastAPI
+- Production-tested: used in production AI and ML pipelines
+
+## Format support overview
 
 | Category | Formats | Integration | Class | Description |
 |----------|---------|-------------|-------|-------------|
-| **Images** | `jpg`, `jpeg`, `png`, `gif`, `bmp`, `tiff`, `tif`, `jfif`, `ico`, `webp`, `avif`, `heic`, `heif`, `svg` | Deep | `ImageFile` | OpenCV-powered processing, format conversion, channel detection and more. |
-| **Audio** | `wav`, `mp3`, `ogg`, `flac`, `aac`, `m4a`, `wma`, `opus`, `aiff` | Deep | `AudioFile` | FFmpeg/PyAV-powered, format conversions, sample rate conversion, streaming, metadata extraction. |
-| **Video** | `mp4`, `avi`, `mov`, `mkv`, `webm`, `flv`, `wmv`, `3gp`, `ogv`, `m4v` | Deep | `VideoFile` | Hardware-accelerated encoding/decoding, frame extraction, audio extraction. |
-| **3D Models** | `obj`, `glb`, `gltf`, `dae`, `fbx`, `3ds`, `ply`, `stl`, `step`, `iges`, `x3d`, `blend` | Shallow | `MediaFile` | Basic file handling, no specialized 3D processing yet. |
-| **Documents** | `pdf`, `txt`, `html`, `htm`, `json`, `js`, `css`, `xml`, `csv` | Shallow | `MediaFile` | Text and document formats, basic file operations |
-| **Archives** | `zip`, `7z`, `tar`, `gz` | Shallow | `MediaFile` | Archive and compressed file formats. Basic file operations. |
-| **Data** | `npy`, `npz`, `pkl`, `pickle` | Shallow | `MediaFile` | Python data serialization formats. Basic file operations. |
+| Images | `jpg`, `jpeg`, `png`, `gif`, `bmp`, `tiff`, `tif`, `jfif`, `ico`, `webp`, `avif`, `heic`, `heif`, `svg` | Deep | `ImageFile` | OpenCV-powered processing, format conversion, channel detection and more. |
+| Audio | `wav`, `mp3`, `ogg`, `flac`, `aac`, `m4a`, `wma`, `opus`, `aiff` | Deep | `AudioFile` | FFmpeg/PyAV-powered, format conversion, sample rate conversion, streaming, metadata extraction. |
+| Video | `mp4`, `avi`, `mov`, `mkv`, `webm`, `flv`, `wmv`, `3gp`, `ogv`, `m4v` | Deep | `VideoFile` | Hardware-accelerated encoding/decoding, frame extraction, audio extraction. |
+| 3D Models | `obj`, `glb`, `gltf`, `dae`, `fbx`, `3ds`, `ply`, `stl`, `step`, `iges`, `x3d`, `blend` | Shallow | `MediaFile` | Basic file handling, no specialized 3D processing yet. |
+| Documents | `pdf`, `txt`, `html`, `htm`, `json`, `js`, `css`, `xml`, `csv` | Shallow | `MediaFile` | Text and document formats, basic file operations. |
+| Archives | `zip`, `7z`, `tar`, `gz` | Shallow | `MediaFile` | Archive and compressed file formats, basic file operations. |
+| Data | `npy`, `npz`, `pkl`, `pickle` | Shallow | `MediaFile` | Python data serialization formats, basic file operations. |
 
-**Deep Integration**: Specialized classes with advanced processing capabilities, format conversion, and media-specific operations.
+Deep integration: specialized classes with advanced processing, format conversion, and media-specific operations.
 
-**Shallow Integration**: Basic `MediaFile` class with universal file operations, automatic format detection, and standard conversions.
+Shallow integration: basic `MediaFile` class with universal file operations, automatic format detection, and standard conversions.
 
-## 🤝 Contributing
+## Contributing
 
-We welcome contributions! Key areas:
+Contributions are welcome. Key areas:
+
 - Performance optimizations
 - New format support
-- Documentation & examples
+- Documentation and examples
 - Test coverage
 - Platform-specific enhancements
 
-## 📄 License
+## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License, see [LICENSE](LICENSE) for details.
 
 ---
-Join the intelligence revolution. Join [socaity.ai](https://www.socaity.ai)
 
-
+Built by [SocAIty](https://www.socaity.ai).
