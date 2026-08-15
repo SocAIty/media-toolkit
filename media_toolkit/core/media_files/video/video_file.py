@@ -57,8 +57,9 @@ class VideoFile(MediaFile):
         return self._get_video_info()
 
     def _file_info(self):
+        """Filename and content type from the magic peek only; container probe is lazy."""
         super()._file_info()
-        self._get_video_info()
+        self._video_info = None
 
     def _safe_remove(self, path: str, silent: bool = True, message: str = None):
         """Safely removes a file if it exists."""

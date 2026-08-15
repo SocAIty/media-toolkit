@@ -70,7 +70,10 @@ class ImageFile(MediaFile):
             Numpy array representation of the image
         """
         bytes_data = self.to_bytes()
-        return cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_UNCHANGED)
+        arr = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_UNCHANGED)
+        if arr is not None:
+            self._decoded = True
+        return arr
 
     @requires_numpy()
     def to_cv2_img(self):
@@ -106,28 +109,12 @@ class ImageFile(MediaFile):
 
     def _file_info(self):
         """
-        Enhanced file info extraction with image-specific metadata.
-        Handles both filename extraction and content type detection in one pass.
+        Filename and content type from the magic peek only. Pixel decode (channels,
+        format validation) happens lazily on first to_np_array / channels access.
         """
-        # First, handle basic filename extraction from parent
         super()._file_info()
-        
-        # Then do image-specific content detection and metadata extraction
-        if self.file_size() > 0:
-            try:
-                # Get image array for analysis and additional metadata
-                image_array = self.to_np_array()
-                
-                # Detect image properties using improved method for additional metadata
-                img_type, channels = self.detect_image_type_and_channels(image_array, default_image_type_return=None)
-                if img_type is not None:
-                    # Override content type based on cv2 strategy
-                    self.content_type = f"image/{img_type}"
-                    self._channels = channels
-                    self._image_format = img_type
-                    
-            except Exception:
-                pass
+        self._channels = None
+        self._image_format = None
 
         if self.content_type is None:
             print("No content type given. Defaulting to image/jpeg")

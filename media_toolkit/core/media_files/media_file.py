@@ -4,6 +4,7 @@ from typing import Union, BinaryIO, Optional, Tuple
 import re
 
 from media_toolkit.core.content_detectors import ContentDetector
+from media_toolkit.core.content_detectors.content_detector import DetectionResult
 from media_toolkit.core.media_files.universal_file import UniversalFile
 from media_toolkit.utils.dependency_requirements import requires_numpy
 from media_toolkit.utils.data_type_utils import (
@@ -52,6 +53,8 @@ class MediaFile(UniversalFile):
         self.content_type = content_type
         self.file_name = file_name
         self.path = None  # Path if loaded from file, indicates file source
+        self._detection: Optional[DetectionResult] = None  # cached magic-peek result
+        self._decoded = False  # set by subclasses after a successful decode
 
     def from_any(self, data, allow_reads_from_disk: bool = True):
         """
@@ -71,7 +74,8 @@ class MediaFile(UniversalFile):
     def from_bytesio_or_handle(
             self,
             buffer: Union[io.BytesIO, BinaryIO, io.BufferedReader],
-            copy: bool = True
+            copy: bool = True,
+            owns: bool = None
     ):
         """
         Load content from BytesIO or file handle with optional copying.
@@ -80,15 +84,16 @@ class MediaFile(UniversalFile):
         Args:
             buffer: Source buffer to read from
             copy: If True, reads entire buffer to bytes. If False, keeps reference (not thread-safe)
+            owns: Only relevant for copy=False; see UniversalFile.from_bytesio_or_handle.
             
         Returns:
             Self for method chaining
         """
         # Set path for file info extraction before calling parent
-        if isinstance(buffer, io.BufferedReader):
+        if isinstance(buffer, io.BufferedReader) and isinstance(getattr(buffer, "name", None), str):
             self.path = buffer.name
             
-        result = super().from_bytesio_or_handle(buffer, copy)
+        result = super().from_bytesio_or_handle(buffer, copy, owns)
         # Only call _file_info if not copying (when copying, from_bytes will be called and handle it)
         if not copy:
             self._file_info()
@@ -137,8 +142,10 @@ class MediaFile(UniversalFile):
 
     def from_starlette_upload_file(self, starlette_upload_file):
         """
-        Load from Starlette UploadFile with metadata extraction.
-        Extracts metadata before calling parent method.
+        Load from Starlette UploadFile as a lazy view (no full read of the spool).
+
+        The client-declared content type is only a hint; the magic-peek
+        :attr:`detection` is computed at wrap time and wins when they disagree.
         
         Args:
             starlette_upload_file: Starlette UploadFile object
@@ -149,9 +156,13 @@ class MediaFile(UniversalFile):
         # Extract metadata before calling parent
         self.file_name = starlette_upload_file.filename
         self.content_type = starlette_upload_file.content_type
-        
-        # Parent method calls from_bytes internally, which will call _file_info
-        return super().from_starlette_upload_file(starlette_upload_file)
+
+        result = super().from_starlette_upload_file(starlette_upload_file)
+
+        # Magic peek at wrap time: trust bytes over the client-declared header.
+        if self.detection.content_type and self.detection.content_type != "application/octet-stream":
+            self.content_type = self.detection.content_type
+        return result
 
     def from_base64(self, base64_str: str):
         """
@@ -222,34 +233,27 @@ class MediaFile(UniversalFile):
         
     def _file_info(self):
         """
-        Extract basic file metadata - filename from path/temp file.
-        Content type detection is handled by subclasses or content detectors.
-        Base implementation only handles filename extraction.
+        Extract basic file metadata: filename from path/temp file and content type
+        from a magic peek (~1 KB). No decode or probe happens here; subclasses
+        compute media-specific metadata lazily on first property access.
         """
-        # cases when file_info is called. Documented for better understanding of the flow.
-        # from_file -> retrieve info directly from the file path
-        # from bytesio -> tempfile
-        # from bytes -> tempfile
-        # from buffered_reader -> set path -> from bytes -> get info from previously set file_path
-        # from np_array -> tempfile
-        # from starlette_upload_file -> from_buffered_reader(spooled_temporary) -> info from the spooled_temporary
-        # from base64 -> from-bytes -> tempfile
-        # from url -> from bytesio
+        # Source changed: invalidate cached detection and decode state.
+        self._detection = None
+        self._decoded = False
 
         # Extract filename from path or temp file for metadata hints
         file_name_hint = self.file_name
         if self.path is not None:
             file_name_hint = os.path.basename(self.path)
-        elif hasattr(self._content_buffer, "name") and self._content_buffer.name is not None:
+        elif file_name_hint is None and self._content_buffer.name is not None:
             file_name_hint = os.path.basename(self._content_buffer.name)
 
         if file_name_hint is not None:
             self.file_name = file_name_hint
 
-        # Determine content type using the centralized detector
+        # Determine content type from the magic peek (no decode)
         if not hasattr(self, 'content_type') or self.content_type is None:
-            detection = ContentDetector.detect_from_universal_file(self, file_name=self.file_name)
-            self.content_type = detection.content_type
+            self.content_type = self.detection.content_type
 
         # Apply defaults if not set
         if self.file_name is None:
@@ -257,6 +261,20 @@ class MediaFile(UniversalFile):
         
         if self.content_type is None:
             self.content_type = "application/octet-stream"
+
+    @property
+    def detection(self) -> DetectionResult:
+        """Magic-byte detection from a ~1 KB peek. Cached; never decodes the media."""
+        if self._detection is None:
+            self._detection = ContentDetector.detect_from_buffer(
+                self.peek(1024), file_name=self.file_name
+            )
+        return self._detection
+
+    @property
+    def is_decoded(self) -> bool:
+        """True once the media content was decoded (e.g. via to_np_array)."""
+        return self._decoded
         
     @property
     def extension(self) -> Optional[str]:
@@ -299,8 +317,13 @@ class MediaFile(UniversalFile):
         return is_file_model_dict(data)
 
     def to_httpx_send_able_tuple(self):
-        """Get tuple format suitable for HTTP client libraries."""
-        return self.file_name, self.read(), self.content_type
+        """Get tuple format suitable for HTTP client libraries.
+
+        The content element is a seekable file-like positioned at 0, so httpx /
+        boto can stream it without an extra in-memory copy.
+        """
+        self._content_buffer.seek(0)
+        return self.file_name, self.fileobj, self.content_type
 
     def to_json(self):
         """

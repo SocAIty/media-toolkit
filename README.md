@@ -214,6 +214,25 @@ media_db["banner"] = "https://example.com/banner.png"
 json_data = media_db.to_json()
 ```
 
+### Lazy ingest and outbound streaming
+
+Loading a file no longer copies it. `from_file`, `from_starlette_upload_file` and `from_url_async` keep a lazy view of the source (file handle, upload spool, download spool) and the content streams straight through:
+
+```python
+media = MediaFile().from_file("large_video.mp4")   # no read yet
+media.is_lazy            # True
+media.detection          # content type from a 1 KB magic peek, no decode
+media.peek(1024)         # first bytes, position untouched
+
+for chunk in media.chunks():        # stream out in 64 KB chunks
+    sink.write(chunk)
+await media.stream_to_async(sink)   # or async
+
+media.materialize()      # own the bytes when the source outlives its scope
+```
+
+`to_httpx_send_able_tuple()` returns `(name, fileobj, content_type)`, so httpx and boto3 upload the spool directly without an in-memory copy.
+
 ### Streaming for large files
 
 ```python
