@@ -319,7 +319,7 @@ class MediaFile(UniversalFile):
     def to_httpx_send_able_tuple(self):
         """Get tuple format suitable for HTTP client libraries.
 
-        The content element is a seekable file-like positioned at 0, so httpx /
+        The content element is a seekable file-like positioned at 0, so httpx2 /
         boto can stream it without an extra in-memory copy.
         """
         self._content_buffer.seek(0)

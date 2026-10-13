@@ -93,7 +93,7 @@ class MediaFile:
         """Async outbound copy. Same bytes, await sink.write."""
 
     async def from_url_async(self, url: str, headers: dict | None = None) -> Self:
-        """Download with httpx.AsyncClient. Stay LAZY on the response stream / spool."""
+        """Download with httpx2.AsyncClient. Stay LAZY on the response stream / spool."""
 ```
 
 `to_httpx_send_able_tuple` changes to:
@@ -102,7 +102,7 @@ class MediaFile:
 return self.file_name, self.fileobj, self.content_type
 ```
 
-httpx and boto accept a file-like. Returning `self.read()` is the bug.
+httpx2 and boto accept a file-like. Returning `self.read()` is the bug.
 
 `ByteSink` is a small protocol, not a class hierarchy:
 

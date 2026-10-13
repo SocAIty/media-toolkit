@@ -174,14 +174,14 @@ async def process_image(file: UploadFile = File(...)):
 ### HTTP client usage
 
 ```python
-import httpx
+import httpx2
 from media_toolkit import ImageFile
 
 image = ImageFile().from_file("photo.jpg")
 
 # Send to API
 files = {"file": image.to_httpx_send_able_tuple()}
-response = httpx.post("https://api.example.com/upload", files=files)
+response = httpx2.post("https://api.example.com/upload", files=files)
 ```
 
 ## Advanced features
@@ -231,7 +231,7 @@ await media.stream_to_async(sink)   # or async
 media.materialize()      # own the bytes when the source outlives its scope
 ```
 
-`to_httpx_send_able_tuple()` returns `(name, fileobj, content_type)`, so httpx and boto3 upload the spool directly without an in-memory copy.
+`to_httpx_send_able_tuple()` returns `(name, fileobj, content_type)`, so httpx2 and boto3 upload the spool directly without an in-memory copy.
 
 ### Streaming for large files
 
@@ -272,7 +272,7 @@ Benchmarks:
 - Automatic format detection: smart content-type inference
 - Seamless conversion: change formats on save
 - Type-safe: full typing support with generics
-- Web-ready: native FastTaskAPI integration, plus extras for httpx and FastAPI
+- Web-ready: native FastTaskAPI integration, plus extras for httpx2 and FastAPI
 - Production-tested: used in production AI and ML pipelines
 
 ## Format support overview

@@ -6,7 +6,7 @@ This document describes adding `StreamedMediaFile` next to `MediaFile` instead o
 
 ## Problem
 
-Same copies as the sibling doc: Starlette spool → `FileContentBuffer` → httpx `read()` → file_service spool. Gateway and file_service want a seekable handle and magic metadata. Model handlers want `to_np_array()`.
+Same copies as the sibling doc: Starlette spool → `FileContentBuffer` → httpx2 `read()` → file_service spool. Gateway and file_service want a seekable handle and magic metadata. Model handlers want `to_np_array()`.
 
 The separate-type answer: those are different objects. Do not put both contracts on `MediaFile`.
 
@@ -171,7 +171,7 @@ Shipping `StreamedMediaFile` without fixing `MediaFile.to_httpx_send_able_tuple`
 1. Add `StreamedMediaFile` in media-toolkit: `from_upload`, `from_any`, `fileobj`, `peek`, `chunks`, `detection`, `to_media_file`, httpx tuple with file-like.
 2. Export from `media_toolkit.core.media_files` and the package root.
 3. APIPod: detect annotation, wrap, do not call `media_from_any`.
-4. file_service / gateway handlers switch annotations and pass `fileobj` to S3 / httpx.
+4. file_service / gateway handlers switch annotations and pass `fileobj` to S3 / httpx2.
 5. Tests: magic constraint, list wrap, URL/base64 wrap, queue rejection, promote to `ImageFile`.
 
 No change to existing MediaFile tests if we do not touch `_file_info`.

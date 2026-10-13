@@ -6,7 +6,7 @@ import tempfile
 from typing import Union, BinaryIO, Iterator, Tuple, Optional, Any
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 
 from media_toolkit.core.media_files.i_media_file import IMediaFile
 from media_toolkit.core.media_files.file_content_buffer import FileContentBuffer
@@ -253,7 +253,7 @@ class UniversalFile(IMediaFile):
 
     async def from_url_async(self, url: str, headers: dict = None, timeout: int = 30):
         """
-        Download a file with httpx.AsyncClient into a spool and keep a lazy view on it.
+        Download a file with httpx2.AsyncClient into a spool and keep a lazy view on it.
 
         Args:
             url: HTTP/HTTPS URL to download
@@ -267,7 +267,7 @@ class UniversalFile(IMediaFile):
         request_headers.setdefault("User-Agent", "media-toolkit")
 
         spool = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        async with httpx2.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             async with client.stream("GET", url, headers=request_headers) as response:
                 response.raise_for_status()
                 async for chunk in response.aiter_bytes(65536):
@@ -385,7 +385,7 @@ class UniversalFile(IMediaFile):
     def to_httpx_send_able_tuple(self):
         """Get tuple format suitable for HTTP client libraries.
 
-        Returns a seekable file-like as the content element so httpx / boto can
+        Returns a seekable file-like as the content element so httpx2 / boto can
         stream it without an extra in-memory copy.
         """
         self._content_buffer.seek(0)
