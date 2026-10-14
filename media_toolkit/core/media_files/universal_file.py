@@ -2,7 +2,11 @@ import base64
 import io
 import os
 import re
-from typing import Union, BinaryIO, Tuple, Optional
+import tempfile
+from typing import Union, BinaryIO, Iterator, Tuple, Optional, Any
+from urllib.parse import urlparse
+
+import httpx2
 
 from media_toolkit.core.media_files.i_media_file import IMediaFile
 from media_toolkit.core.media_files.file_content_buffer import FileContentBuffer
@@ -64,7 +68,10 @@ class UniversalFile(IMediaFile):
 
         # Route to appropriate handler based on data type
         try:
-            if isinstance(data, (io.BufferedReader, io.BytesIO)):
+            if isinstance(data, (io.BufferedReader, io.BytesIO)) or (
+                not isinstance(data, (str, bytes)) and hasattr(data, "read") and hasattr(data, "seek")
+                and not is_starlette_upload_file(data)
+            ):
                 self.from_bytesio_or_handle(data)
             elif isinstance(data, str):
                 if is_valid_file_path(data):
@@ -96,26 +103,31 @@ class UniversalFile(IMediaFile):
     def from_bytesio_or_handle(
             self,
             buffer: Union[io.BytesIO, BinaryIO, io.BufferedReader],
-            copy: bool = True
+            copy: bool = True,
+            owns: bool = None
     ):
         """
-        Load content from BytesIO or file handle with optional copying.
-        
+        Load content from BytesIO or any seekable file handle with optional copying.
+
         Args:
-            buffer: Source buffer to read from
-            copy: If True, reads entire buffer to bytes. If False, keeps reference (not thread-safe)
-            
+            buffer: Source buffer to read from (BytesIO, open file, upload spool, ...)
+            copy: If True, reads entire buffer to bytes. If False, keeps a view on the handle (LAZY).
+            owns: Only relevant for copy=False. True when this object may mutate/keep the handle
+                  (e.g. a BytesIO we created). Defaults to True for BytesIO, False for other handles.
+
         Returns:
             Self for method chaining
         """
-        if not isinstance(buffer, (io.BytesIO, io.BufferedReader)):
-            raise ValueError(f"Buffer must be BytesIO or BufferedReader, got {type(buffer)}")
+        if not (hasattr(buffer, "read") and hasattr(buffer, "seek")):
+            raise ValueError(f"Buffer must be a seekable binary handle, got {type(buffer)}")
 
         self._reset_buffer()
         buffer.seek(0)
 
         if not copy:
-            self._content_buffer.overwrite_buffer(buffer)
+            if owns is None:
+                owns = isinstance(buffer, io.BytesIO)
+            self._content_buffer.overwrite_buffer(buffer, owns=owns)
         else:
             self.from_bytes(buffer.read())
             buffer.seek(0)
@@ -129,21 +141,29 @@ class UniversalFile(IMediaFile):
     def from_file(self, path_or_handle: Union[str, io.BytesIO, io.BufferedReader]):
         """
         Load file from path or handle.
-        
+
+        Paths are opened lazily: the handle is kept as a view and no copy is made
+        until a method needs owned bytes (see :meth:`materialize`). The path is
+        the owner of the data.
+
         Args:
             path_or_handle: File path string or file handle
-            
+
         Returns:
             Self for method chaining
         """
-        if isinstance(path_or_handle, (io.BufferedReader, io.BytesIO)):
-            self.from_bytesio_or_handle(path_or_handle)
-        elif isinstance(path_or_handle, str):
+        if isinstance(path_or_handle, str):
             if not os.path.exists(path_or_handle):
                 raise FileNotFoundError(f"File {path_or_handle} not found.")
 
-            with open(path_or_handle, 'rb') as file:
-                self.from_bytesio_or_handle(file)
+            if self._content_buffer._use_temp_file:
+                # Caller explicitly requested an owned temp file copy.
+                with open(path_or_handle, 'rb') as file:
+                    self.from_bytesio_or_handle(file, copy=True)
+            else:
+                self.from_bytesio_or_handle(open(path_or_handle, 'rb'), copy=False, owns=False)
+        else:
+            self.from_bytesio_or_handle(path_or_handle)
 
         return self
 
@@ -156,19 +176,20 @@ class UniversalFile(IMediaFile):
 
     def from_starlette_upload_file(self, starlette_upload_file):
         """
-        Load from Starlette UploadFile with basic data extraction.
-        
+        Load from Starlette UploadFile as a lazy view on the upload spool.
+
+        No copy is made: the object borrows the request-scoped spool. If you keep
+        the object after the request ends, call :meth:`materialize` first.
+
         Args:
             starlette_upload_file: Starlette UploadFile object
-            
+
         Returns:
             Self for method chaining
         """
-        content = starlette_upload_file.file.read()
-        if starlette_upload_file.size == 0:
+        self.from_bytesio_or_handle(starlette_upload_file.file, copy=False, owns=False)
+        if self._content_buffer.size() == 0:
             raise ValueError("UploadFile is empty.")
-
-        self.from_bytes(content)
         return self
 
     def from_base64(self, base64_str: str):
@@ -230,6 +251,34 @@ class UniversalFile(IMediaFile):
         self.file_name = original_file_name
         return self.from_bytesio_or_handle(file, copy=False)
 
+    async def from_url_async(self, url: str, headers: dict = None, timeout: int = 30):
+        """
+        Download a file with httpx2.AsyncClient into a spool and keep a lazy view on it.
+
+        Args:
+            url: HTTP/HTTPS URL to download
+            headers: Optional request headers
+            timeout: Request timeout in seconds
+
+        Returns:
+            Self for method chaining
+        """
+        request_headers = dict(headers) if headers else {}
+        request_headers.setdefault("User-Agent", "media-toolkit")
+
+        spool = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
+        async with httpx2.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            async with client.stream("GET", url, headers=request_headers) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_bytes(65536):
+                    spool.write(chunk)
+                content_disposition = response.headers.get("Content-Disposition", "")
+                name_match = re.findall('filename="(.+)"', content_disposition)
+
+        spool.seek(0)
+        self.file_name = name_match[0] if name_match else os.path.basename(urlparse(url).path)
+        return self.from_bytesio_or_handle(spool, copy=False, owns=True)
+
     @requires_numpy()
     def to_np_array(self, shape=None, dtype=np.uint8):
         """
@@ -265,6 +314,66 @@ class UniversalFile(IMediaFile):
         res = self._content_buffer.read(number_of_bytes)
         return res
 
+    @property
+    def fileobj(self) -> BinaryIO:
+        """Seekable view of the current source (spool, path handle, or owned buffer)."""
+        return self._content_buffer.fileobj
+
+    @property
+    def is_lazy(self) -> bool:
+        """True while the content is a borrowed view of an external source (no owned copy)."""
+        return not self._content_buffer.owns_buffer
+
+    def peek(self, n: int = 1024) -> bytes:
+        """Read the first n bytes without disturbing the current position."""
+        return self._content_buffer.peek(n)
+
+    def chunks(self, n: int = 65536) -> Iterator[bytes]:
+        """Iterate over the content in chunks of n bytes, starting from position 0."""
+        return self._content_buffer.chunks(n)
+
+    def materialize(self):
+        """Copy a borrowed source into an owned buffer. Idempotent.
+
+        Call this before keeping the object beyond the lifetime of its source
+        (e.g. a Starlette upload spool that closes when the request ends).
+
+        Returns:
+            Self for method chaining
+        """
+        self._content_buffer.materialize()
+        return self
+
+    def stream_to(self, sink: Any) -> Any:
+        """Sync outbound copy from fileobj: seek 0, write chunks, finalize.
+
+        Args:
+            sink: Object with ``write(bytes)``; ``finalize()`` is called if present.
+
+        Returns:
+            The sink's finalize() result, or None if the sink has no finalize.
+        """
+        for chunk in self.chunks():
+            sink.write(chunk)
+        if hasattr(sink, "finalize"):
+            return sink.finalize()
+        return None
+
+    async def stream_to_async(self, sink: Any) -> Any:
+        """Async outbound copy. Same bytes as stream_to, awaits sink.write / sink.finalize.
+
+        Args:
+            sink: Object with ``async write(bytes)``; ``async finalize()`` is called if present.
+
+        Returns:
+            The sink's finalize() result, or None if the sink has no finalize.
+        """
+        for chunk in self.chunks():
+            await sink.write(chunk)
+        if hasattr(sink, "finalize"):
+            return await sink.finalize()
+        return None
+
     def to_bytes_io(self) -> io.BytesIO:
         """Get file content as BytesIO object."""
         return self._content_buffer.to_bytes_io()
@@ -274,14 +383,17 @@ class UniversalFile(IMediaFile):
         return base64.b64encode(self.to_bytes()).decode('ascii')
 
     def to_httpx_send_able_tuple(self):
-        """Get tuple format suitable for HTTP client libraries."""
-        # Return with generic defaults since we don't have metadata
-        return "file", self.read(), "application/octet-stream"
+        """Get tuple format suitable for HTTP client libraries.
+
+        Returns a seekable file-like as the content element so httpx2 / boto can
+        stream it without an extra in-memory copy.
+        """
+        self._content_buffer.seek(0)
+        return "file", self.fileobj, "application/octet-stream"
 
     def _reset_buffer(self):
-        """Reset internal buffer to empty state."""
-        self._content_buffer.seek(0)
-        self._content_buffer.truncate(0)
+        """Reset internal buffer to empty state. Borrowed views are detached, not truncated."""
+        self._content_buffer.reset()
 
     def save(self, path: str = None):
         """
@@ -317,7 +429,7 @@ class UniversalFile(IMediaFile):
         Returns:
             File size in specified unit
         """
-        size_bytes = self._content_buffer.getbuffer().nbytes
+        size_bytes = self._content_buffer.size()
         
         unit_multipliers = {
             "bytes": 1,

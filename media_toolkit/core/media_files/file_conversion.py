@@ -16,7 +16,7 @@ from media_toolkit.core.media_files.video.video_file import VideoFile
 from media_toolkit.core.content_detectors import ContentDetector
 from media_toolkit.utils.data_type_utils import (
     is_numpy_array_like, is_file_model_dict,
-    is_valid_file_path, is_url
+    is_valid_file_path, is_url, is_starlette_upload_file
 )
 
 MediaFileType = Union[MediaFile, ImageFile, AudioFile, VideoFile]
@@ -125,6 +125,9 @@ def media_from_numpy(
     Returns:
         Appropriate media file instance
     """
+    if not is_numpy_array_like(np_array) and not isinstance(np_array, (list, tuple)):
+        raise ValueError(f"media_from_numpy expects a numpy array, got {type(np_array)}")
+
     # First try to use the type hint if provided
     hint_class_name = _interpret_type_hint(type_hint)
     
@@ -271,6 +274,20 @@ def media_from_any(
         instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
         return instance.from_dict(data, allow_reads_from_disk=allow_reads_from_disk)
     
+    # Handle Starlette uploads: lazy wrap of the request spool (no full read, no re-copy)
+    if is_starlette_upload_file(data):
+        target_class_name = _interpret_type_hint(type_hint) if type_hint else None
+        target_class = _resolve_media_class(target_class_name or 'MediaFile')
+        instance = target_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
+        instance.from_starlette_upload_file(data)
+
+        # Without a hint, the magic peek decides the concrete media class.
+        if not target_class_name and instance.detection.media_class != type(instance).__name__:
+            detected_class = _resolve_media_class(instance.detection.media_class)
+            instance = detected_class(use_temp_file=use_temp_file, temp_dir=temp_dir)
+            instance.from_starlette_upload_file(data)
+        return instance
+
     # Determine target class using type hint first, then content detection
     target_class_name = None
     

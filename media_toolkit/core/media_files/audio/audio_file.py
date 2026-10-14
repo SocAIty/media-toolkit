@@ -31,11 +31,24 @@ class AudioFile(MediaFile):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._audio_info: Optional[AudioInfo] = None
+        self._sample_rate: Optional[int] = None
+        self._channels: Optional[int] = None
 
     @property
     def audio_info(self) -> AudioInfo:
+        """Probe the audio lazily on first access; decode as fallback when the probe fails."""
         if self._audio_info is None:
             self._audio_info = get_audio_info(self)
+            if not self._audio_info.is_valid:
+                try:
+                    audio, sample_rate = self.to_np_array(return_sample_rate=True)
+                    self._audio_info.sample_rate = self._audio_info.sample_rate or sample_rate
+                    self._audio_info.channels = self._audio_info.channels or (1 if audio.ndim == 1 else audio.shape[1])
+                    self._audio_info.duration = self._audio_info.duration or (
+                        len(audio) / sample_rate if sample_rate else None
+                    )
+                except Exception:
+                    pass
         return self._audio_info
 
     @requires('av', 'numpy')
@@ -95,6 +108,7 @@ class AudioFile(MediaFile):
             self._sample_rate = sample_rate
         if self._channels is None:
             self._channels = 1 if audio.ndim == 1 else audio.shape[1]
+        self._decoded = True
 
         if return_sample_rate:
             return audio, sample_rate
@@ -391,28 +405,12 @@ class AudioFile(MediaFile):
 
     def _file_info(self):
         """
-        Enhanced file info extraction with audio-specific metadata using PyAV probe.
-        Handles both filename extraction and content type detection in one pass.
+        Filename and content type from the magic peek only. The PyAV probe
+        (sample rate, channels, duration) runs lazily on first audio_info access.
         """
-        # First, handle basic filename extraction from parent
         super()._file_info()
-        
-        # Then do audio-specific content detection and metadata extraction
-        self._audio_info = get_audio_info(self)
-        if self.audio_info.is_valid:
-            if self.content_type is None and self.audio_info.codec_name:
-                _, _, ext = get_valid_format_codec_ext_combination(self.audio_info.codec_name)
-                self.content_type = f"audio/{ext}"
-        else:
-            # Fallback: decode quickly to get duration if probe failed
-            try:
-                audio, sample_rate = self.to_np_array(return_sample_rate=True)
-                self._audio_info.sample_rate = self.audio_info.sample_rate or sample_rate
-                self._audio_info.channels = self.audio_info.channels or (1 if audio.ndim == 1 else audio.shape[1])
-                self._audio_info.duration = self.audio_info.duration or (len(audio) / sample_rate if sample_rate else None)
-            except Exception:
-                pass
-        
+        self._audio_info = None
+
         if self.content_type is None:
             print("No content type given or detection failed. Defaulting to audio/wav")
             self.content_type = "audio/wav"

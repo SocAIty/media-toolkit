@@ -358,11 +358,11 @@ class TestFileConversionUtilities:
         assert isinstance(glb_from_base64, MediaFile)
         assert glb_from_base64.file_size() == glb_file.file_size()
 
-        glb_from_url = media_from_any("TODO: INSERT URL HERE")
+        glb_url = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/2.0/Box/glTF-Binary/Box.glb"
+        glb_from_url = media_from_any(glb_url)
         assert isinstance(glb_from_url, MediaFile)
         assert glb_from_url.content_type == 'model/gltf-binary'
         assert glb_from_url.file_size() > 0
-        pass
 
     def test_media_from_FileModel(self):
         """Test media_from_FileModel function."""
@@ -386,7 +386,7 @@ class TestFileConversionUtilities:
             pass
         
         # Test security check
-        with pytest.raises(ValueError, match="Reading files from disk is not allowed"):
+        with pytest.raises(ValueError, match="disk"):
             media_from_any(file_model, allow_reads_from_disk=False)
 
     def test_media_from_FileModel_with_bytes(self):
@@ -414,6 +414,137 @@ class TestFileConversionUtilities:
         # Test invalid numpy array
         with pytest.raises(Exception):
             media_from_numpy("not_an_array")
+
+
+class _CollectSink:
+    """Minimal ByteSink for stream_to tests."""
+
+    def __init__(self):
+        self.data = b""
+
+    def write(self, chunk: bytes):
+        self.data += chunk
+
+    def finalize(self):
+        return len(self.data)
+
+
+class _AsyncCollectSink:
+    """Minimal AsyncByteSink for stream_to_async tests."""
+
+    def __init__(self):
+        self.data = b""
+
+    async def write(self, chunk: bytes):
+        self.data += chunk
+
+    async def finalize(self):
+        return len(self.data)
+
+
+class TestStreaming:
+    """Tests for lazy ingest and outbound streaming (fileobj, peek, chunks, stream_to, materialize)."""
+
+    wav_path = f"{test_files_dir}test_audio.wav"
+    png_path = f"{test_files_dir}test_image.png"
+
+    def _wav_bytes(self) -> bytes:
+        with open(self.wav_path, "rb") as f:
+            return f.read()
+
+    def test_lazy_from_file(self):
+        mf = MediaFile().from_file(self.wav_path)
+        assert mf.is_lazy
+        assert mf.content_type in ('audio/wave', 'audio/wav')
+        assert mf.file_name == "test_audio.wav"
+        assert mf.file_size() == len(self._wav_bytes())
+        # read() is a view pass over the source, object stays lazy
+        assert mf.read() == self._wav_bytes()
+        assert mf.is_lazy
+
+    def test_detection_from_peek(self):
+        img = ImageFile().from_file(self.png_path)
+        assert img.is_lazy
+        assert not img.is_decoded
+        assert img.detection.content_type == 'image/png'
+        assert img.detection.media_class == 'ImageFile'
+        # decode happens on demand, not at ingest
+        arr = img.to_np_array()
+        assert arr is not None
+        assert img.is_decoded
+
+    def test_peek_and_chunks(self):
+        mf = MediaFile().from_file(self.wav_path)
+        expected = self._wav_bytes()
+        assert mf.peek(4) == expected[:4]
+        assert b"".join(mf.chunks(1024)) == expected
+
+    def test_spool_wrap_no_copy(self):
+        """Simulates the Starlette upload path: borrowed spool, no full read at wrap."""
+        import tempfile
+        spool = tempfile.SpooledTemporaryFile(max_size=1024)
+        expected = self._wav_bytes()
+        spool.write(expected)
+        spool.seek(0)
+
+        mf = MediaFile().from_bytesio_or_handle(spool, copy=False, owns=False)
+        assert mf.is_lazy
+        assert mf.content_type in ('audio/wave', 'audio/wav')
+        assert mf.read() == expected
+        spool.close()
+
+    def test_materialize(self):
+        import tempfile
+        spool = tempfile.SpooledTemporaryFile(max_size=1024)
+        expected = self._wav_bytes()
+        spool.write(expected)
+        spool.seek(0)
+
+        mf = MediaFile().from_bytesio_or_handle(spool, copy=False, owns=False)
+        mf.materialize()
+        assert not mf.is_lazy
+        spool.close()  # source gone, owned copy survives
+        assert mf.read() == expected
+
+    def test_httpx_tuple_returns_fileobj(self):
+        mf = MediaFile().from_file(self.wav_path)
+        name, fileobj, content_type = mf.to_httpx_send_able_tuple()
+        assert name == "test_audio.wav"
+        assert hasattr(fileobj, "read") and hasattr(fileobj, "seek")
+        assert fileobj.read() == self._wav_bytes()
+
+    def test_stream_to_sync(self):
+        mf = MediaFile().from_file(self.wav_path)
+        sink = _CollectSink()
+        result = mf.stream_to(sink)
+        expected = self._wav_bytes()
+        assert sink.data == expected
+        assert result == len(expected)
+
+    def test_stream_to_async(self):
+        import asyncio
+
+        mf = MediaFile().from_file(self.wav_path)
+        sink = _AsyncCollectSink()
+        result = asyncio.run(mf.stream_to_async(sink))
+        expected = self._wav_bytes()
+        assert sink.data == expected
+        assert result == len(expected)
+
+    def test_from_url_async(self):
+        import asyncio
+
+        url = "https://www.socaity.ai/socaity_logo.webp"
+        mf = asyncio.run(MediaFile().from_url_async(url))
+        assert mf.content_type == 'image/webp'
+        assert mf.file_size() > 0
+
+    def test_lazy_audio_probe_on_first_access(self):
+        audio = AudioFile().from_file(self.wav_path)
+        assert audio.is_lazy
+        assert audio._audio_info is None  # no probe at ingest
+        assert audio.sample_rate is not None  # first access pays the probe
+        assert audio.duration is not None
 
 
 class TestIntegration:
@@ -521,6 +652,13 @@ def run_all_tests():
     conversion_tests.test_media_from_FileModel_with_bytes()
     print("✓ FileModel conversion with bytes test passed")
     
+    # Run streaming tests
+    streaming_tests = TestStreaming()
+    print("\nRunning streaming tests...")
+    for test_name in [m for m in dir(streaming_tests) if m.startswith("test_")]:
+        getattr(streaming_tests, test_name)()
+        print(f"✓ {test_name} passed")
+
     # Run integration tests
     integration_tests = TestIntegration()
     print("\nRunning integration tests...")

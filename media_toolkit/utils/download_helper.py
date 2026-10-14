@@ -1,5 +1,5 @@
 from urllib.parse import urlparse, urlunparse
-import httpx
+import httpx2
 import tqdm
 from typing import Union, Tuple, Optional
 from io import BytesIO
@@ -45,7 +45,7 @@ def _download_file(
     headers = {} if (not headers or not isinstance(headers, dict)) else headers
     headers.update({"User-Agent": "media-toolkit"})
 
-    with httpx.stream("GET", download_url, headers=headers, timeout=timeout) as response:
+    with httpx2.stream("GET", download_url, headers=headers, timeout=timeout) as response:
         response.raise_for_status()
         total = int(response.headers.get("content-length", 0)) or None
 
@@ -104,7 +104,7 @@ def download_file(
     """
     try:
         return _download_file(download_url, save_path, silent, timeout, chunk_size, headers)
-    except httpx.HTTPStatusError as e:
+    except httpx2.HTTPStatusError as e:
         status_code = e.response.status_code
 
         if status_code == 404:
