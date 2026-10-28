@@ -153,15 +153,19 @@ class MediaFile(UniversalFile):
         Returns:
             Self for method chaining
         """
-        # Extract metadata before calling parent
-        self.file_name = starlette_upload_file.filename
+        # The filename is part of the upload, independent of the spool's temp path.
+        declared_name = getattr(starlette_upload_file, "filename", None)
+        self.file_name = declared_name
         self.content_type = starlette_upload_file.content_type
 
         result = super().from_starlette_upload_file(starlette_upload_file)
 
         # Magic peek at wrap time: trust bytes over the client-declared header.
+        # The declared filename still wins over a temp-path basename.
         if self.detection.content_type and self.detection.content_type != "application/octet-stream":
             self.content_type = self.detection.content_type
+        if isinstance(declared_name, str) and declared_name:
+            self.file_name = declared_name
         return result
 
     def from_base64(self, base64_str: str):

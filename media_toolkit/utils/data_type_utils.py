@@ -31,11 +31,16 @@ def is_url(url: str) -> bool:
 
 
 def is_starlette_upload_file(data) -> bool:
-    """Check if data is a Starlette UploadFile."""
-    return (hasattr(data, '__module__') and
-            hasattr(data, '__class__') and
-            data.__module__ == 'starlette.datastructures' and
-            data.__class__.__name__ == 'UploadFile')
+    """True for Starlette's UploadFile and subclasses such as LimitedUploadFile.
+
+    The declared filename lives on the object. An exact class-name match dropped
+    that name and left the allowlist with nameless bytes.
+    """
+    try:
+        from starlette.datastructures import UploadFile
+    except ImportError:
+        return False
+    return isinstance(data, UploadFile)
 
 
 def is_file_model_dict(data: dict) -> bool:
